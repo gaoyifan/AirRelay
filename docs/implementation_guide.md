@@ -6,7 +6,7 @@ This guide provides code examples and instructions for implementing the core com
 
 Before starting implementation, ensure you have:
 
-1. Python 3.8+ installed
+1. Python 3.12+ installed
 2. Telegram Bot created with API credentials
 3. Cloudflare Workers KV account set up
 4. MQTT broker with WebSocket support available

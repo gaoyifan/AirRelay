@@ -1,49 +1,54 @@
+import logging
+from typing import Optional
+
 from telethon import TelegramClient, events
 from telethon.tl.functions.channels import CreateForumTopicRequest
-import os
-import asyncio
-import logging
-from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 
+
 class SMSTelegramClient(TelegramClient):
     """Enhanced Telegram client that handles SMS forwarding and commands"""
-    
+
     def __init__(self, session_name, api_id, api_hash):
         """Initialize the Telegram client with required credentials"""
         super().__init__(session_name, api_id, api_hash)
         self.db = None  # Will be set by the main application
         self.mqtt_client = None  # Will be set by the main application
-    
+
     def set_dependencies(self, db, mqtt_client):
         """Set dependencies after initialization"""
         self.db = db
         self.mqtt_client = mqtt_client
         logger.info("Telegram client dependencies set")
-    
+
     def register_handlers(self):
         """Register event handlers for incoming messages and commands"""
+
         # Register message handler - this handles forum message replies
         @events.register(events.NewMessage(incoming=True))
         async def handle_new_message(event):
             # Skip messages from ourselves
             if event.out:
                 return
-            
+
             # Skip command messages (they're handled by specific handlers)
-            if event.text.startswith('/'):
+            if event.text.startswith("/"):
                 return
-            
+
             # Check if it's a reply in a topic
             topic_id = None
-            if event.reply_to and hasattr(event.reply_to, 'forum_topic') and event.reply_to.forum_topic:
+            if (
+                event.reply_to
+                and hasattr(event.reply_to, "forum_topic")
+                and event.reply_to.forum_topic
+            ):
                 topic_id = event.reply_to.reply_to_top_id or event.reply_to.reply_to_msg_id
-            
+
             if topic_id:
                 # It's a reply in a topic, handle it as an SMS reply
                 await self._handle_sms_reply(event.chat_id, topic_id, event.id, event.text)
-        
+
         # Register command handlers using decorators
         @events.register(events.NewMessage(pattern="^/start"))
         async def handle_start_command(event):
@@ -57,7 +62,7 @@ class SMSTelegramClient(TelegramClient):
                 "/help - Show this help message"
             )
             raise events.StopPropagation
-        
+
         @events.register(events.NewMessage(pattern="^/bind"))
         async def handle_bind_command(event):
             # Extract IMEI from command
@@ -65,10 +70,10 @@ class SMSTelegramClient(TelegramClient):
             if len(parts) < 2:
                 await event.respond("Please specify the device IMEI. Usage: /bind <imei>")
                 return
-            
+
             imei = parts[1].strip()
             group_id = event.chat_id
-            
+
             # Check if this device is already bound
             existing_group = self.db.get_device_group(imei)
             if existing_group:
@@ -76,7 +81,7 @@ class SMSTelegramClient(TelegramClient):
                     f"Device {imei} is already bound to another group. Unbind it first."
                 )
                 return
-            
+
             # Check if this group already has a device
             existing_device = self.db.get_group_device(group_id)
             if existing_device:
@@ -84,17 +89,17 @@ class SMSTelegramClient(TelegramClient):
                     f"This group is already bound to device {existing_device}. Unbind it first."
                 )
                 return
-            
+
             # Create the binding
             self.db.set_device_group(imei, group_id)
             self.db.set_group_device(group_id, imei)
-            
+
             await event.respond(f"Device {imei} has been bound to this group successfully.")
-        
+
         @events.register(events.NewMessage(pattern="^/unbind"))
         async def handle_unbind_command(event):
             group_id = event.chat_id
-            
+
             # Check if IMEI was specified
             parts = event.text.split(maxsplit=1)
             if len(parts) < 2:
@@ -110,27 +115,27 @@ class SMSTelegramClient(TelegramClient):
                 if bound_group != group_id:
                     await event.respond(f"Device {imei} is not bound to this group.")
                     return
-            
+
             # Remove the binding
             self.db.set_device_group(imei, None)
             self.db.set_group_device(group_id, None)
-            
+
             await event.respond(f"Device {imei} has been unbound from this group.")
-        
+
         @events.register(events.NewMessage(pattern="^/status"))
         async def handle_status_command(event):
             group_id = event.chat_id
-            
+
             # Get the device for this group
             imei = self.db.get_group_device(group_id)
             if not imei:
                 await event.respond("No device is bound to this group.")
                 return
-            
+
             # Here you could include more status info like online/offline,
             # last seen time, etc., if that information is available
             await event.respond(f"Device IMEI: {imei}\nStatus: Active")
-        
+
         @events.register(events.NewMessage(pattern="^/help"))
         async def handle_help_command(event):
             await event.respond(
@@ -141,7 +146,7 @@ class SMSTelegramClient(TelegramClient):
                 "/help - Show this help message"
             )
             raise events.StopPropagation
-        
+
         # Add all the event handlers
         self.add_event_handler(handle_new_message)
         self.add_event_handler(handle_start_command)
@@ -149,37 +154,36 @@ class SMSTelegramClient(TelegramClient):
         self.add_event_handler(handle_unbind_command)
         self.add_event_handler(handle_status_command)
         self.add_event_handler(handle_help_command)
-        
+
         logger.info("Telegram event handlers registered")
-    
+
     async def create_topic(self, chat_id: int, title: str) -> Optional[int]:
         """Create a new forum topic in a group"""
         try:
-            result = await self(CreateForumTopicRequest(
-                channel=chat_id,
-                title=title
-            ))
-            
+            result = await self(CreateForumTopicRequest(channel=chat_id, title=title))
+
             for update in result.updates:
-                if hasattr(update, 'id'):
+                if hasattr(update, "id"):
                     return update.id
-            
+
             return None
         except Exception as e:
             logger.error(f"Failed to create topic: {e}")
             return None
-    
-    async def forward_sms_to_telegram(self, sender: str, content: str, imei: str, timestamp: int = None):
+
+    async def forward_sms_to_telegram(
+        self, sender: str, content: str, imei: str, timestamp: int = None
+    ):
         """Forward an SMS message to the appropriate Telegram group and topic"""
         # Find the Telegram group for this device
         group_id = self.db.get_device_group(imei)
         if not group_id:
             logger.warning(f"No Telegram group found for device {imei}")
             return
-        
+
         # Format the message
         formatted_message = f"From: {sender}\n\n{content}"
-        
+
         # Find or create a topic for this sender
         topic_id = self.db.get_thread_topic(group_id, sender)
         if not topic_id:
@@ -191,20 +195,20 @@ class SMSTelegramClient(TelegramClient):
             else:
                 logger.error(f"Failed to create topic for {sender}")
                 return
-        
+
         # Send the message to the topic
         try:
             sent_msg = await self.send_message(
-                entity=group_id,
-                message=formatted_message,
-                reply_to=topic_id
+                entity=group_id, message=formatted_message, reply_to=topic_id
             )
-            logger.info(f"SMS from {sender} forwarded to Telegram group {group_id}, topic {topic_id}")
+            logger.info(
+                f"SMS from {sender} forwarded to Telegram group {group_id}, topic {topic_id}"
+            )
             return sent_msg.id
         except Exception as e:
             logger.error(f"Failed to send message to topic: {e}")
             return None
-    
+
     async def update_message_status(self, message_id: str, status: str):
         """Update the status of a sent message in Telegram"""
         # Get the tracked message info
@@ -212,36 +216,34 @@ class SMSTelegramClient(TelegramClient):
         if not tracked_message:
             logger.warning(f"No tracked message found with ID {message_id}")
             return
-        
+
         # Update message in Telegram if needed
         group_id = tracked_message.group_id
         msg_id = tracked_message.msg_id
-        
+
         status_text = "✓✓" if status == "delivered" else "❌"
-        
+
         try:
             # Edit the original message to show status
             original_message = await self.get_messages(group_id, ids=msg_id)
             if original_message:
                 await self.edit_message(
-                    entity=group_id,
-                    message=msg_id,
-                    text=f"{original_message.text} {status_text}"
+                    entity=group_id, message=msg_id, text=f"{original_message.text} {status_text}"
                 )
                 logger.info(f"Message status updated to {status} for message {message_id}")
         except Exception as e:
             logger.error(f"Failed to update message status: {e}")
-        
+
         # If the message was delivered (or failed), remove from tracking
         self.db.delete_tracked_message(message_id)
-    
+
     async def _handle_sms_reply(self, group_id: int, topic_id: int, msg_id: int, text: str):
         """Handle replies to messages in Telegram topics"""
         # Get all phone numbers associated with this topic
         # This is a simplified approach - in a real implementation, you might want
         # to extract the phone number from the topic title or from messages in the topic
         phone_number = None
-        
+
         # Search for the phone number mapped to this topic
         for key in self.db.namespace.list_keys():
             if key.startswith(f"thread:{group_id}:"):
@@ -250,25 +252,23 @@ class SMSTelegramClient(TelegramClient):
                 if stored_topic_id == topic_id:
                     phone_number = phone
                     break
-        
+
         if not phone_number:
             await self.send_message(
                 entity=group_id,
                 reply_to=msg_id,
-                message="Error: Could not determine the recipient for this message."
+                message="Error: Could not determine the recipient for this message.",
             )
             return
-        
+
         # Get the device IMEI for this group
         imei = self.db.get_group_device(group_id)
         if not imei:
             await self.send_message(
-                entity=group_id,
-                reply_to=msg_id,
-                message="Error: No device is bound to this group."
+                entity=group_id, reply_to=msg_id, message="Error: No device is bound to this group."
             )
             return
-        
+
         # Send the SMS via MQTT
         message_id = self.mqtt_client.send_sms(imei, phone_number, text)
         if message_id:
@@ -276,7 +276,5 @@ class SMSTelegramClient(TelegramClient):
             self.db.track_message(message_id, group_id, msg_id)
         else:
             await self.send_message(
-                entity=group_id,
-                reply_to=msg_id,
-                message="Failed to send SMS message."
-            ) 
+                entity=group_id, reply_to=msg_id, message="Failed to send SMS message."
+            )

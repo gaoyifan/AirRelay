@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    volumes:
+      - ./.env:/app/.env:ro
+    environment:
+      - TZ=UTC
+    networks:
+      - airrelay-network
+
+  mqtt:
+    image: emqx/emqx:5.4.0
+    restart: unless-stopped
+    ports:
+      - "8883:8883"
+      - "9001:9001"
+    volumes:
+      - emqx-data:/opt/emqx/data
+      - emqx-log:/opt/emqx/log
+    environment:
+      - EMQX_DASHBOARD__DEFAULT_USERNAME=${EMQX_DASHBOARD_USER}
+      - EMQX_DASHBOARD__DEFAULT_PASSWORD=${EMQX_DASHBOARD_PASSWORD}
+    networks:
+      - airrelay-network
+
+networks:
+  airrelay-network:
+    driver: bridge
+
+volumes:
+  emqx-data:
+  emqx-log: 

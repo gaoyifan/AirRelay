@@ -71,7 +71,7 @@ The system consists of the following components:
 5. Device sends the SMS and publishes delivery status to `sms/status`
 
 ## System Requirements
-- Python 3.8 or higher
+- Python 3.12 or higher
 - MQTT broker with WebSocket support
 - Telegram Bot API credentials
 - Cloudflare Workers KV account

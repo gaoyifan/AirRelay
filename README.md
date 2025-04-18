@@ -12,13 +12,47 @@ AirRelay is a service that forwards SMS messages between a Luat Air780E device a
 
 ## Prerequisites
 
-- Python 3.8+
+- Python 3.12+
 - Telegram Bot created with API credentials (via @BotFather)
 - Cloudflare Workers KV account
 - MQTT broker with WebSocket support
 - Air780E device configured for MQTT communication
 
 ## Installation
+
+### Using Rye (Recommended)
+
+This project uses [Rye](https://rye-up.com) for Python project management.
+
+1. Install Rye following the [official instructions](https://rye-up.com/guide/installation/)
+
+2. Clone the repository:
+
+```bash
+git clone https://github.com/yourusername/air-relay.git
+cd air-relay
+```
+
+3. Set up the project with Rye:
+
+```bash
+rye sync
+```
+
+4. Copy the example environment file and edit it with your credentials:
+
+```bash
+cp .env.example .env
+# Edit .env with your credentials
+```
+
+5. Run the application:
+
+```bash
+rye run python -m src
+```
+
+### Using pip (Alternative)
 
 1. Clone the repository:
 
@@ -96,6 +130,40 @@ Full documentation is available in the `docs/` directory:
 - [Implementation Guide](docs/implementation_guide.md)
 - [Device Integration](docs/device_integration.md)
 - [Telethon Group Topic Guide](docs/telethon_group_topic.md)
+
+## Development
+
+This project uses [Just](https://just.systems/) as a command runner. To see all available commands:
+
+```bash
+just
+```
+
+Common development commands:
+
+```bash
+# Format code using autoflake, isort, and black
+just fmt
+
+# Run tests
+just test
+
+# Type check with mypy
+just typecheck
+
+# Run a complete check (formatting, type checking, tests)
+just check
+
+# Clean up Python cache files
+just clean
+```
+
+You can also use Rye for dependency management:
+
+```bash
+# Update dependencies
+just update-deps
+```
 
 ## License
 
