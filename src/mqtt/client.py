@@ -2,7 +2,8 @@ import asyncio
 import json
 import logging
 import uuid
-from typing import TYPE_CHECKING
+import time
+from typing import TYPE_CHECKING, Dict
 
 import aiomqtt
 
@@ -37,6 +38,9 @@ class AsyncMQTTClient:
         self.connected = False
         self.client = None
         self.task = None
+        
+        # Device status tracking
+        self.device_status: Dict[str, float] = {}  # IMEI to last heartbeat timestamp mapping
 
     async def connect(self):
         """Connect to the MQTT broker asynchronously"""
@@ -128,8 +132,10 @@ class AsyncMQTTClient:
                     elif message.topic.value == "device/status":
                         logger.info(f"Received device status update: {payload}")
                         try:
-                            DeviceStatus(**payload)
-                            # Could handle device status updates here
+                            status = DeviceStatus(**payload)
+                            # Store the device status timestamp
+                            self.device_status[status.imei] = time.time()
+                            logger.debug(f"Updated device {status.imei} heartbeat timestamp")
                         except Exception as e:
                             logger.error(f"Invalid device status format: {e}")
                     else:
@@ -179,3 +185,11 @@ class AsyncMQTTClient:
         except Exception as e:
             logger.error(f"Failed to publish message: {e}")
             return None
+
+    def get_device_last_seen(self, imei: str) -> float:
+        """Get the timestamp of the last heartbeat for a device
+        
+        Returns:
+            Timestamp of the last heartbeat, or None if device never seen
+        """
+        return self.device_status.get(imei)

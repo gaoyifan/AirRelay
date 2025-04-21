@@ -1,6 +1,8 @@
 import logging
+import time
 from typing import TYPE_CHECKING, Optional
 
+import humanize
 from telethon import TelegramClient, events
 from telethon.tl.functions.bots import SetBotCommandsRequest
 from telethon.tl.functions.channels import CreateForumTopicRequest
@@ -265,9 +267,28 @@ class SMSTelegramClient(TelegramClient):
                 await self._send_response(event, "No device is bound to this group.")
                 return
 
-            # Here you could include more status info like online/offline,
-            # last seen time, etc., if that information is available
-            await self._send_response(event, f"Device IMEI: {imei}\nStatus: Active")
+            # Get the device's last heartbeat timestamp
+            last_seen_timestamp = self.mqtt_client.get_device_last_seen(imei)
+            
+            if last_seen_timestamp is None:
+                status_text = f"Device IMEI: {imei}\nStatus: Never connected"
+            else:
+                # Calculate the time elapsed
+                now = time.time()
+                time_elapsed = now - last_seen_timestamp
+                
+                # Format the time elapsed using humanize
+                elapsed = humanize.naturaltime(time_elapsed)
+                
+                # Determine status based on time elapsed
+                if time_elapsed < 300:  # 5 minutes
+                    status = "Active"
+                else:
+                    status = "Inactive"
+                
+                status_text = f"Device IMEI: {imei}\nStatus: {status}\nLast heartbeat: {elapsed}"
+            
+            await self._send_response(event, status_text)
 
         @self.on(events.NewMessage(pattern="^/help"))
         async def handle_help_command(event):
