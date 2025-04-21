@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class Settings(BaseModel):
@@ -39,11 +39,10 @@ class IncomingSMS(BaseModel):
     timestamp: int = Field(..., description="Unix timestamp when the message was received")
     imei: str = Field(..., description="The IMEI number of the device that received the SMS")
 
-    @validator("sender")
+    @field_validator("sender", "recipient", mode="before")
     def validate_phone_number(cls, v):
-        # Simple validation for phone number format
-        if not v.startswith("+"):
-            return f"+{v}"
+        if isinstance(v, int):
+            v = str(v)
         return v
 
 
@@ -53,6 +52,12 @@ class OutgoingSMS(BaseModel):
     recipient: str = Field(..., description="Phone number to send the SMS to")
     content: str = Field(..., description="Text content to send")
     message_id: str = Field(..., description="Unique identifier for tracking message status")
+
+    @field_validator("recipient", mode="before")
+    def validate_phone_number(cls, v):
+        if isinstance(v, int):
+            v = str(v)
+        return v
 
 
 class OutgoingSMSStatus(BaseModel):

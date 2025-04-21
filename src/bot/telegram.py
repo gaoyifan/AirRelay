@@ -3,6 +3,8 @@ from typing import Optional
 
 from telethon import TelegramClient, events
 from telethon.tl.functions.channels import CreateForumTopicRequest
+from telethon.tl.functions.bots import SetBotCommandsRequest
+from telethon.tl.types import BotCommand, BotCommandScopeDefault
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -27,6 +29,31 @@ class SMSTelegramClient(TelegramClient):
         self.mqtt_client = mqtt_client
         logger.info("Telegram client dependencies set")
 
+    async def register_bot_commands(self):
+        """Register bot commands to be displayed in the Telegram client."""
+        try:
+            await self(
+                SetBotCommandsRequest(
+                    scope=BotCommandScopeDefault(),
+                    lang_code="en",
+                    commands=[
+                        BotCommand(command=cmd, description=desc)
+                        for cmd, desc in [
+                            ("linkdevice", "Bind a device to this group"),
+                            ("unlinkdevice", "Remove a device binding"),
+                            ("linkphone", "Bind a phone number to a topic"),
+                            ("unlinkphone", "Remove a phone number binding"),
+                            ("phoneinfo", "Show phone number bound to current topic"),
+                            ("status", "Show system status"),
+                            ("help", "Show help message"),
+                        ]
+                    ],
+                )
+            )
+            logger.info("Bot commands registered successfully")
+        except Exception as e:
+            logger.error(f"Failed to register bot commands: {e}")
+
     def register_handlers(self):
         """Register event handlers for incoming messages and commands"""
         
@@ -49,23 +76,27 @@ class SMSTelegramClient(TelegramClient):
         # Register command handlers using decorators
         @events.register(events.NewMessage(pattern="^/start"))
         async def handle_start_command(event):
-            await event.respond(
+            await self._send_response(
+                event,
                 "SMS to Telegram Bridge Bot\n\n"
                 "Use this bot to forward SMS messages to Telegram and reply to them.\n\n"
                 "Available commands:\n"
-                "/bind <imei> - Bind a device to this group\n"
-                "/unbind <imei> - Remove a device binding\n"
+                "/linkdevice <imei> - Bind a device to this group\n"
+                "/unlinkdevice <imei> - Remove a device binding\n"
+                "/linkphone <phone> - Bind a phone number to a topic\n"
+                "/unlinkphone <phone> - Remove a phone number binding\n"
+                "/phoneinfo - Show phone number bound to current topic\n"
                 "/status - Show system status\n"
                 "/help - Show this help message"
             )
             raise events.StopPropagation
 
-        @events.register(events.NewMessage(pattern="^/bind"))
-        async def handle_bind_command(event):
+        @events.register(events.NewMessage(pattern="^/linkdevice"))
+        async def handle_bind_device_command(event):
             # Extract IMEI from command
             parts = event.text.split(maxsplit=1)
             if len(parts) < 2:
-                await event.respond("Please specify the device IMEI. Usage: /bind <imei>")
+                await self._send_response(event, "Please specify the device IMEI. Usage: /linkdevice <imei>")
                 return
 
             imei = parts[1].strip()
@@ -74,26 +105,26 @@ class SMSTelegramClient(TelegramClient):
             # Check if this device is already bound
             existing_group = self.db.get_group_from_device(imei)
             if existing_group:
-                await event.respond(
-                    f"Device {imei} is already bound to another group. Unbind it first."
+                await self._send_response(
+                    event, f"Device {imei} is already bound to another group. Unbind it first."
                 )
                 return
 
             # Check if this group already has a device
             existing_device = self.db.get_device_from_group(group_id)
             if existing_device:
-                await event.respond(
-                    f"This group is already bound to device {existing_device}. Unbind it first."
+                await self._send_response(
+                    event, f"This group is already bound to device {existing_device}. Unbind it first."
                 )
                 return
 
             # Create the binding
             self.db.map_device_group(imei, group_id)
 
-            await event.respond(f"Device {imei} has been bound to this group successfully.")
+            await self._send_response(event, f"Device {imei} has been bound to this group successfully.")
 
-        @events.register(events.NewMessage(pattern="^/unbind"))
-        async def handle_unbind_command(event):
+        @events.register(events.NewMessage(pattern="^/unlinkdevice"))
+        async def handle_unbind_device_command(event):
             group_id = event.chat_id
 
             # Check if IMEI was specified
@@ -102,20 +133,90 @@ class SMSTelegramClient(TelegramClient):
                 # No IMEI specified, unbind whatever device is bound to this group
                 imei = self.db.get_device_from_group(group_id)
                 if not imei:
-                    await event.respond("No device is bound to this group.")
+                    await self._send_response(event, "No device is bound to this group.")
                     return
             else:
                 # IMEI specified, check if it's bound to this group
                 imei = parts[1].strip()
                 bound_group = self.db.get_group_from_device(imei)
                 if bound_group != group_id:
-                    await event.respond(f"Device {imei} is not bound to this group.")
+                    await self._send_response(event, f"Device {imei} is not bound to this group.")
                     return
 
             # Remove the binding
             self.db.delete_device_group(imei=imei, group_id=group_id)
 
-            await event.respond(f"Device {imei} has been unbound from this group.")
+            await self._send_response(event, f"Device {imei} has been unbound from this group.")
+
+        @events.register(events.NewMessage(pattern="^/linkphone"))
+        async def handle_bind_phone_command(event):
+            # Extract phone number from command
+            parts = event.text.split(maxsplit=1)
+            if len(parts) < 2:
+                await self._send_response(event, "Please specify the phone number. Usage: /linkphone <phone>")
+                return
+
+            phone_number = parts[1].strip()
+            group_id = event.chat_id
+            
+            # Get current topic ID using the helper method
+            current_topic_id = self._get_current_topic_id(event)
+
+            # Check if this phone is already bound to a topic in this group
+            existing_topic = self.db.get_topic_from_phone(group_id, phone_number)
+            if existing_topic:
+                await self._send_response(
+                    event, f"Phone number {phone_number} is already bound to a topic in this group."
+                )
+                return
+
+            topic_id = None
+            # Create a new topic (only when command is used in General Topic)
+            if not current_topic_id:
+                topic_title = f"{phone_number}"
+                topic_id = await self.create_topic(group_id, topic_title)
+                
+                if not topic_id:
+                    await self._send_response(event, "Failed to create a new topic. Please check if this group supports topics and bot has permissions to manage topics.")
+                    return
+
+            # Create the binding
+            self.db.map_phone_topic(group_id, phone_number, topic_id)
+
+            await self._send_response(event, f"Phone number {phone_number} has been bound to the topic successfully.")
+
+        @events.register(events.NewMessage(pattern="^/unlinkphone"))
+        async def handle_unbind_phone_command(event):
+            group_id = event.chat_id
+            
+            # Get current topic ID using the helper method
+            topic_id = self._get_current_topic_id(event)
+            if not topic_id:
+                await self._send_response(event, "This command must be used within a topic.")
+                return
+
+            # Extract phone number from command
+            parts = event.text.split(maxsplit=1)
+            if len(parts) < 2:
+                phone_number = self.db.get_phone_from_topic(group_id, topic_id)
+                if not phone_number:
+                    await self._send_response(event, "No phone number is bound to this topic.")  
+                    return
+            else:
+                phone_number = parts[1].strip()
+            
+            current_phone_number = self.db.get_phone_from_topic(group_id, topic_id)
+            if current_phone_number != phone_number:
+                await self._send_response(event, f"Phone number {phone_number} is not bound to this topic.")
+                return
+
+            # Remove the binding
+            try:
+                self.db.remove_phone_topic(group_id=group_id, phone=phone_number, topic_id=topic_id)
+                await self._send_response(event, f"Phone number {phone_number} has been unbound from its topic.")
+            except Exception as e:
+                logger.error(f"Failed to unbind phone: {e}")
+                await self._send_response(event, f"Failed to unbind phone number: {str(e)}")
 
         @events.register(events.NewMessage(pattern="^/status"))
         async def handle_status_command(event):
@@ -124,31 +225,56 @@ class SMSTelegramClient(TelegramClient):
             # Get the device for this group
             imei = self.db.get_device_from_group(group_id)
             if not imei:
-                await event.respond("No device is bound to this group.")
+                await self._send_response(event, "No device is bound to this group.")
                 return
 
             # Here you could include more status info like online/offline,
             # last seen time, etc., if that information is available
-            await event.respond(f"Device IMEI: {imei}\nStatus: Active")
+            await self._send_response(event, f"Device IMEI: {imei}\nStatus: Active")
 
         @events.register(events.NewMessage(pattern="^/help"))
         async def handle_help_command(event):
-            await event.respond(
+            await self._send_response(
+                event,
                 "Available commands:\n"
-                "/bind <imei> - Bind a device to this group\n"
-                "/unbind <imei> - Remove a device binding\n"
+                "/linkdevice <imei> - Bind a device to this group\n"
+                "/unlinkdevice <imei> - Remove a device binding\n"
+                "/linkphone <phone> - Bind a phone number to a topic\n"
+                "/unlinkphone <phone> - Remove a phone number binding\n"
+                "/phoneinfo - Show phone number bound to current topic\n"
                 "/status - Show system status\n"
                 "/help - Show this help message"
             )
             raise events.StopPropagation
 
+        @events.register(events.NewMessage(pattern="^/phoneinfo"))
+        async def handle_phone_info_command(event):
+            group_id = event.chat_id
+            
+            # Get current topic ID using the helper method
+            topic_id = self._get_current_topic_id(event)
+            if not topic_id:
+                await self._send_response(event, "This command can only be used within a topic.")
+                return
+                
+            # Get the phone number for this topic
+            phone_number = self.db.get_phone_from_topic(group_id, topic_id)
+            
+            if phone_number:
+                await self._send_response(event, f"Phone number bound to this topic: {phone_number}")
+            else:
+                await self._send_response(event, "No phone number is bound to this topic.")
+
         # Add all the event handlers
         self.add_event_handler(handle_new_message)
         self.add_event_handler(handle_start_command)
-        self.add_event_handler(handle_bind_command)
-        self.add_event_handler(handle_unbind_command)
+        self.add_event_handler(handle_bind_device_command)
+        self.add_event_handler(handle_unbind_device_command)
+        self.add_event_handler(handle_bind_phone_command)
+        self.add_event_handler(handle_unbind_phone_command)
         self.add_event_handler(handle_status_command)
         self.add_event_handler(handle_help_command)
+        self.add_event_handler(handle_phone_info_command)
 
         logger.info("Telegram event handlers registered")
 
@@ -165,6 +291,32 @@ class SMSTelegramClient(TelegramClient):
         except Exception as e:
             logger.error(f"Failed to create topic: {e}")
             return None
+
+    def _get_current_topic_id(self, event) -> Optional[int]:
+        """Helper method to extract the current topic ID from an event"""
+        if (
+            hasattr(event, "reply_to") 
+            and event.reply_to 
+            and hasattr(event.reply_to, "forum_topic") 
+            and event.reply_to.forum_topic
+        ):
+            return event.reply_to.reply_to_top_id or event.reply_to.reply_to_msg_id
+        return None
+        
+    async def _send_response(self, event, message: str):
+        """Helper method to respond to messages correctly in topics or general chat."""
+        
+        topic_id = self._get_current_topic_id(event)
+
+        if topic_id:
+            await self.send_message(
+                entity=event.chat_id,
+                reply_to=topic_id,
+                message=message
+            )
+        else:
+            # We're in general chat, use respond
+            return await event.respond(message)
 
     async def forward_sms_to_telegram(
         self, sender: str, content: str, imei: str, timestamp: int = None

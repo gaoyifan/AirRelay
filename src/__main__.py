@@ -84,6 +84,9 @@ class AirRelay:
 
         # Register Telegram event handlers
         self.tg.register_handlers()
+        
+        # Register bot commands menu
+        await self.tg.register_bot_commands()
 
         # Connect MQTT client
         await self.mqtt.connect()

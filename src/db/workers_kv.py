@@ -140,10 +140,8 @@ class Database:
         """Get tracking info for a message"""
         key = f"msg:{message_id}"
         data = self.namespace.read(key)
-        if data:
-            return MessageTracking.model_validate(data)
-        return None
-
+        return MessageTracking.model_validate_json(data) if data else None
+        
     def delete_tracked_message(self, message_id: str) -> None:
         """Delete tracking info for a message"""
         key = f"msg:{message_id}"
