@@ -8,6 +8,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./.env:/app/.env:ro
+      - ./telegram_session:/app/telegram_session
     environment:
       - TZ=UTC
     networks:
@@ -18,7 +19,7 @@ services:
     restart: unless-stopped
     ports:
       - "8883:8883"
-      - "9001:9001"
+      - "18083:18083"
     volumes:
       - emqx-data:/opt/emqx/data
       - emqx-log:/opt/emqx/log

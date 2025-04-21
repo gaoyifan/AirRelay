@@ -8,16 +8,15 @@ log.info("main", PROJECT, VERSION)
 sys = require("sys")
 require "sysplus" -- Required for HTTP library
 
+-- Load configuration
+local config = require("config")
+log.info("MQTT", "Loaded configuration for", config.host)
+
 -- Global MQTT client instance
 local mqttc = nil
 
--- Configure MQTT connection parameters
-local mqtt_host = "telecom.el.gaof.net"
-local mqtt_port = 1883
-local mqtt_isssl = false
-local client_id = nil -- Will be set to IMEI
-local mqtt_user = "test2"
-local mqtt_pass = "test"
+-- Will be set to IMEI
+local client_id = nil 
 
 -- MQTT topics
 local TOPIC_SMS_INCOMING = "sms/incoming"
@@ -231,13 +230,13 @@ sys.taskInit(function()
     
     log.info("Network", "IP ready.")
     
-    log.info("MQTT", "Connecting to broker:", mqtt_host, mqtt_port)
+    log.info("MQTT", "Connecting to broker:", config.host, config.port)
     
     -- Create MQTT client
-    mqttc = mqtt.create(nil, mqtt_host, mqtt_port, mqtt_isssl)
+    mqttc = mqtt.create(nil, config.host, config.port, config.isssl)
     
     -- Configure MQTT client
-    mqttc:auth(client_id, mqtt_user, mqtt_pass) -- Set user/pass if needed
+    mqttc:auth(client_id, config.user, config.pass) -- Set user/pass if needed
     mqttc:keepalive(120) -- Keep alive interval in seconds
     mqttc:autoreconn(true, 5000) -- Auto reconnect with 5s delay
     

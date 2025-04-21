@@ -55,7 +55,7 @@ class AirRelay:
 
         # Initialize Telegram client
         self.tg = SMSTelegramClient(
-            "air_relay_bot", self.settings.tg_api_id, self.settings.tg_api_hash
+            "./telegram_session/air_relay_bot.session", self.settings.tg_api_id, self.settings.tg_api_hash
         )
 
         # Initialize MQTT client

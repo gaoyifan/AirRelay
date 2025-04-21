@@ -20,16 +20,22 @@ This is the Air780E device code for the SMS to Telegram Bridge system. It handle
 
 ## Configuration
 
-Edit the `main.lua` file to set the following parameters:
+Create a `config.lua` file based on the provided example file `config.lua.example` with your configuration parameters:
 
 ```lua
--- Configure MQTT connection parameters
-local mqtt_host = "192.168.215.2" -- Replace with your MQTT broker address
-local mqtt_port = 1883
-local mqtt_isssl = false
-local mqtt_user = nil -- Set this if your broker requires authentication
-local mqtt_pass = nil -- Set this if your broker requires authentication
+-- MQTT Connection Parameters
+return {
+    host = "your.mqtt.server.com",
+    port = 8883,
+    isssl = true,
+    user = "your_username",
+    pass = "your_password"
+}
+```
 
+You can also adjust other settings in the `main.lua` file, such as:
+
+```lua
 -- Message queue configuration
 local MAX_QUEUE_SIZE = 50 -- Maximum number of messages to store in queue
 ```

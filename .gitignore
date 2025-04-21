@@ -56,7 +56,6 @@ venv.bak/
 # Project specific
 data/
 mosquitto/
-air_relay_bot.session
 *.session
 *.session-journal
 
@@ -65,3 +64,6 @@ certs/
 *.key
 *.crt
 *.pem
+
+# LuatOS configuration
+luatos/config.lua
