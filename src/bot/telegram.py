@@ -476,7 +476,7 @@ class SMSTelegramClient(TelegramClient):
             return
 
         # Format the message
-        formatted_message = f"From: {sender}\n\n{content}"
+        formatted_message = f"{content}"
 
         # Find or create a topic for this sender
         topic_id = self.db.get_topic_from_phone(group_id, sender)
