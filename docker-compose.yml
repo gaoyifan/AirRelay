@@ -16,6 +16,7 @@ services:
     image: emqx/emqx:5.4.0
     restart: unless-stopped
     ports:
+      - "1883:1883"
       - "8883:8883"
       - "18083:18083"
     volumes:
