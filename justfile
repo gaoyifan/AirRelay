@@ -49,11 +49,11 @@ generate-certs:
 
 # Start services with Docker Compose
 docker-up: generate-certs
-    docker-compose up -d --build
+    docker compose up -d --build
 
 # Stop Docker Compose services
 docker-down:
-    docker-compose down
+    docker compose down
 
 docker-debug: docker-up
     docker compose logs -f
