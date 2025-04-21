@@ -156,6 +156,8 @@ class Database:
             return False
         
         try:
+            if isinstance(admins, int):
+                return user_id == admins
             admin_list = [int(admin_id) for admin_id in admins.split(',')]
             return user_id in admin_list
         except Exception:

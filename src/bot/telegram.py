@@ -493,11 +493,6 @@ class SMSTelegramClient(TelegramClient):
 
     async def _handle_sms_reply(self, group_id: int, topic_id: int, msg_id: int, text: str):
         """Handle replies to messages in Telegram topics"""
-        # Get all phone numbers associated with this topic
-        # This is a simplified approach - in a real implementation, you might want
-        # to extract the phone number from the topic title or from messages in the topic
-        phone_number = None
-
         # Get the phone number directly using the reverse mapping
         phone_number = self.db.get_phone_from_topic(group_id, topic_id)
 
@@ -533,12 +528,9 @@ class SMSTelegramClient(TelegramClient):
         if not self.db.has_admins() and event.text.startswith("/add_admin"):
             return True
             
-        # For help command, always allow
-        if event.text.startswith("/help"):
-            return True
-            
         # Otherwise check admin status
         user_id = event.sender_id
+        logger.debug(f"Checking admin status for user {user_id}")
         if not self.db.is_admin(user_id):
             await self._send_response(event, "This command requires admin privileges.")
             return False
