@@ -55,7 +55,9 @@ class AirRelay:
 
         # Initialize Telegram client
         self.tg = SMSTelegramClient(
-            "./telegram_session/air_relay_bot.session", self.settings.tg_api_id, self.settings.tg_api_hash
+            "./telegram_session/air_relay_bot.session",
+            self.settings.tg_api_id,
+            self.settings.tg_api_hash,
         )
 
         # Initialize MQTT client
@@ -84,7 +86,7 @@ class AirRelay:
 
         # Register Telegram event handlers
         self.tg.register_handlers()
-        
+
         # Register bot commands menu
         await self.tg.register_bot_commands()
 

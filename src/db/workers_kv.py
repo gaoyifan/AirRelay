@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional
 
 import workers_kv
 from cachetools import LRUCache
@@ -8,48 +8,49 @@ from src.models.schemas import MessageTracking
 
 class CachedNamespace:
     """
-    A cache wrapper for workers_kv.Namespace that uses an LRUCache to avoid 
+    A cache wrapper for workers_kv.Namespace that uses an LRUCache to avoid
     frequent remote database requests.
     """
+
     def __init__(self, namespace: workers_kv.Namespace, cache_size: int = 65536):
         self.namespace = namespace
         self.cache = LRUCache(maxsize=cache_size)
-    
+
     def read(self, key: str) -> Any:
         """Read a value from cache or underlying namespace if not in cache"""
         if key in self.cache:
             return self.cache[key]
-        
+
         value = self.namespace.read(key)
         if value is not None:
             self.cache[key] = value
         return value
-    
+
     def write(self, data: Dict[str, Any]) -> None:
         """Write data to underlying namespace and update cache"""
         self.namespace.write(data)
-        
+
         # Update cache with new values
         for key, value in data.items():
             self.cache[key] = value
-    
+
     def delete_one(self, key: str) -> None:
         """Delete a key from underlying namespace and cache"""
         self.namespace.delete_one(key)
-        
+
         # Remove from cache if present
         if key in self.cache:
             del self.cache[key]
-    
+
     def delete_many(self, keys: List[str]) -> None:
         """Delete multiple keys from underlying namespace and cache"""
         self.namespace.delete_many(keys)
-        
+
         # Remove from cache if present
         for key in keys:
             if key in self.cache:
                 del self.cache[key]
-                
+
     def clear_cache(self) -> None:
         """Clear the in-memory cache without affecting the underlying namespace data"""
         self.cache.clear()
@@ -76,22 +77,18 @@ class Database:
     def map_device_group(self, imei: str, group_id: int) -> None:
         """
         Map a device to a Telegram group and create the reverse mapping
-        
+
         This method maintains both:
         - device_to_group:{imei} -> group_id
         - group_to_device:{group_id} -> imei
         """
-        self.namespace.write({
-            f"device_to_group:{imei}": str(group_id),
-            f"group_to_device:{group_id}": imei
-        })
-    
+        self.namespace.write(
+            {f"device_to_group:{imei}": str(group_id), f"group_to_device:{group_id}": imei}
+        )
+
     def delete_device_group(self, imei: str, group_id: int) -> None:
         """Remove device-group mappings for given parameters"""
-        self.namespace.delete_many([
-            f"device_to_group:{imei}",
-            f"group_to_device:{group_id}"
-        ])
+        self.namespace.delete_many([f"device_to_group:{imei}", f"group_to_device:{group_id}"])
 
     def get_topic_from_phone(self, group_id: int, phone: str) -> Optional[int]:
         """Get topic ID for a phone number in a group"""
@@ -106,29 +103,26 @@ class Database:
         key = f"topic_to_phone:{group_id}:{topic_id}"
         return self.namespace.read(key)
 
-    def map_phone_topic(
-        self, group_id: int, phone: str, topic_id: int
-    ) -> None:
+    def map_phone_topic(self, group_id: int, phone: str, topic_id: int) -> None:
         """
         Map a phone number to a topic in a group and create the reverse mapping
-        
+
         This method maintains both:
         - phone_to_topic:{group_id}:{phone} -> topic_id
         - topic_to_phone:{group_id}:{topic_id} -> phone
         """
-        self.namespace.write({
-            f"phone_to_topic:{group_id}:{phone}": str(topic_id),
-            f"topic_to_phone:{group_id}:{topic_id}": phone
-        })
+        self.namespace.write(
+            {
+                f"phone_to_topic:{group_id}:{phone}": str(topic_id),
+                f"topic_to_phone:{group_id}:{topic_id}": phone,
+            }
+        )
 
-    def remove_phone_topic(
-        self, group_id: int, phone: str, topic_id: int
-    ) -> None:
+    def remove_phone_topic(self, group_id: int, phone: str, topic_id: int) -> None:
         """Remove phone-to-topic and topic-to-phone mappings for given parameters"""
-        self.namespace.delete_many([
-            f"phone_to_topic:{group_id}:{phone}",
-            f"topic_to_phone:{group_id}:{topic_id}"
-        ])
+        self.namespace.delete_many(
+            [f"phone_to_topic:{group_id}:{phone}", f"topic_to_phone:{group_id}:{topic_id}"]
+        )
 
     def track_message(self, message_id: str, group_id: int, msg_id: int) -> None:
         """Track an outgoing message for status updates"""
@@ -141,12 +135,12 @@ class Database:
         key = f"msg:{message_id}"
         data = self.namespace.read(key)
         return MessageTracking.model_validate_json(data) if data else None
-        
+
     def delete_tracked_message(self, message_id: str) -> None:
         """Delete tracking info for a message"""
         key = f"msg:{message_id}"
         self.namespace.delete_one(key)
-        
+
     # Admin management methods
     def is_admin(self, user_id: int) -> bool:
         """Check if a user is an admin"""
@@ -154,56 +148,56 @@ class Database:
         admins = self.namespace.read(key)
         if not admins:
             return False
-        
+
         try:
             if isinstance(admins, int):
                 return user_id == admins
-            admin_list = [int(admin_id) for admin_id in admins.split(',')]
+            admin_list = [int(admin_id) for admin_id in admins.split(",")]
             return user_id in admin_list
         except Exception:
             return False
-    
+
     def add_admin(self, user_id: int) -> bool:
         """Add a user as an admin"""
         key = f"admins"
         admins = self.namespace.read(key)
-        
+
         if not admins:
             # First admin - just add the user
             self.namespace.write({key: str(user_id)})
             return True
-        
+
         try:
-            admin_list = [int(admin_id) for admin_id in admins.split(',')]
+            admin_list = [int(admin_id) for admin_id in admins.split(",")]
             if user_id in admin_list:
                 # Already an admin
                 return False
-                
+
             admin_list.append(user_id)
             self.namespace.write({key: ",".join(str(admin_id) for admin_id in admin_list)})
             return True
         except Exception:
             return False
-            
+
     def has_admins(self) -> bool:
         """Check if there are any admins registered"""
         key = f"admins"
         admins = self.namespace.read(key)
         return bool(admins)
-    
+
     def get_admins(self) -> List[int]:
         """Get list of all admin user IDs"""
         key = f"admins"
         admins = self.namespace.read(key)
-        
+
         if not admins:
             return []
-            
+
         try:
-            return [int(admin_id) for admin_id in admins.split(',')]
+            return [int(admin_id) for admin_id in admins.split(",")]
         except Exception:
             return []
-        
+
     def clear_cache(self) -> None:
         """Clear the in-memory cache"""
         self.namespace.clear_cache()
