@@ -168,3 +168,54 @@ just update-deps
 ## License
 
 This project is licensed under the MIT License. 
+
+### MQTT Integration
+
+The system uses MQTT for communication with the Air780E devices. We've implemented two MQTT client options:
+
+#### 1. Synchronous MQTT Client (Legacy)
+
+Uses `paho-mqtt` directly with callbacks for handling messages. This is maintained for backward compatibility.
+
+#### 2. Asynchronous MQTT Client (Recommended)
+
+Uses `aiomqtt` for fully asynchronous operation with these advantages:
+- No callbacks, using modern Python async/await syntax
+- Simplified error handling
+- Graceful connection and disconnection
+- Better integration with asyncio applications
+- Cleaner code and reduced complexity
+
+### Usage Examples
+
+```python
+# Async MQTT Client
+async with AsyncMQTTClient(...) as client:
+    await client.subscribe("topic")
+    await client.publish("topic", payload)
+    async for message in client.messages:
+        print(message.payload)
+```
+
+### Requirements
+
+- Python 3.12+
+- paho-mqtt
+- aiomqtt
+- telethon
+- workers-kv.py
+- pydantic
+- dotenv
+
+### Setup and Installation
+
+1. Clone this repository
+2. Install dependencies: `rye sync`
+3. Set up environment variables (see `.env.example`)
+4. Run the application: `python -m src`
+
+### Testing
+
+Test scripts are available in the `tests` directory:
+- `test_async_mqtt.py`: Tests the async MQTT client
+- `test_incoming_sms.py`: Simulates an incoming SMS message 

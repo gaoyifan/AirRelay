@@ -4,6 +4,11 @@ from typing import Optional
 from telethon import TelegramClient, events
 from telethon.tl.functions.channels import CreateForumTopicRequest
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from src.db.workers_kv import Database
+    from src.mqtt.client import AsyncMQTTClient
+
 logger = logging.getLogger(__name__)
 
 
@@ -13,8 +18,8 @@ class SMSTelegramClient(TelegramClient):
     def __init__(self, session_name, api_id, api_hash):
         """Initialize the Telegram client with required credentials"""
         super().__init__(session_name, api_id, api_hash)
-        self.db = None  # Will be set by the main application
-        self.mqtt_client = None  # Will be set by the main application
+        self.db : Database = None  # Will be set by the main application
+        self.mqtt_client : AsyncMQTTClient = None  # Will be set by the main application
 
     def set_dependencies(self, db, mqtt_client):
         """Set dependencies after initialization"""
@@ -24,18 +29,10 @@ class SMSTelegramClient(TelegramClient):
 
     def register_handlers(self):
         """Register event handlers for incoming messages and commands"""
-
+        
         # Register message handler - this handles forum message replies
-        @events.register(events.NewMessage(incoming=True))
+        @events.register(events.NewMessage(incoming=True, pattern=r"^[^/]+$"))
         async def handle_new_message(event):
-            # Skip messages from ourselves
-            if event.out:
-                return
-
-            # Skip command messages (they're handled by specific handlers)
-            if event.text.startswith("/"):
-                return
-
             # Check if it's a reply in a topic
             topic_id = None
             if (
@@ -75,7 +72,7 @@ class SMSTelegramClient(TelegramClient):
             group_id = event.chat_id
 
             # Check if this device is already bound
-            existing_group = self.db.get_device_group(imei)
+            existing_group = self.db.get_group_from_device(imei)
             if existing_group:
                 await event.respond(
                     f"Device {imei} is already bound to another group. Unbind it first."
@@ -83,7 +80,7 @@ class SMSTelegramClient(TelegramClient):
                 return
 
             # Check if this group already has a device
-            existing_device = self.db.get_group_device(group_id)
+            existing_device = self.db.get_device_from_group(group_id)
             if existing_device:
                 await event.respond(
                     f"This group is already bound to device {existing_device}. Unbind it first."
@@ -91,8 +88,7 @@ class SMSTelegramClient(TelegramClient):
                 return
 
             # Create the binding
-            self.db.set_device_group(imei, group_id)
-            self.db.set_group_device(group_id, imei)
+            self.db.map_device_group(imei, group_id)
 
             await event.respond(f"Device {imei} has been bound to this group successfully.")
 
@@ -104,21 +100,20 @@ class SMSTelegramClient(TelegramClient):
             parts = event.text.split(maxsplit=1)
             if len(parts) < 2:
                 # No IMEI specified, unbind whatever device is bound to this group
-                imei = self.db.get_group_device(group_id)
+                imei = self.db.get_device_from_group(group_id)
                 if not imei:
                     await event.respond("No device is bound to this group.")
                     return
             else:
                 # IMEI specified, check if it's bound to this group
                 imei = parts[1].strip()
-                bound_group = self.db.get_device_group(imei)
+                bound_group = self.db.get_group_from_device(imei)
                 if bound_group != group_id:
                     await event.respond(f"Device {imei} is not bound to this group.")
                     return
 
             # Remove the binding
-            self.db.set_device_group(imei, None)
-            self.db.set_group_device(group_id, None)
+            self.db.delete_device_group(imei=imei, group_id=group_id)
 
             await event.respond(f"Device {imei} has been unbound from this group.")
 
@@ -127,7 +122,7 @@ class SMSTelegramClient(TelegramClient):
             group_id = event.chat_id
 
             # Get the device for this group
-            imei = self.db.get_group_device(group_id)
+            imei = self.db.get_device_from_group(group_id)
             if not imei:
                 await event.respond("No device is bound to this group.")
                 return
@@ -176,7 +171,7 @@ class SMSTelegramClient(TelegramClient):
     ):
         """Forward an SMS message to the appropriate Telegram group and topic"""
         # Find the Telegram group for this device
-        group_id = self.db.get_device_group(imei)
+        group_id = self.db.get_group_from_device(imei)
         if not group_id:
             logger.warning(f"No Telegram group found for device {imei}")
             return
@@ -185,13 +180,14 @@ class SMSTelegramClient(TelegramClient):
         formatted_message = f"From: {sender}\n\n{content}"
 
         # Find or create a topic for this sender
-        topic_id = self.db.get_thread_topic(group_id, sender)
+        topic_id = self.db.get_topic_from_phone(group_id, sender)
         if not topic_id:
             # Create a new topic
             topic_title = f"SMS: {sender}"
             topic_id = await self.create_topic(group_id, topic_title)
             if topic_id:
-                self.db.set_thread_topic(group_id, sender, topic_id, topic_title)
+                # This will also create the reverse mapping
+                self.db.map_phone_topic(group_id, sender, topic_id)
             else:
                 logger.error(f"Failed to create topic for {sender}")
                 return
@@ -221,14 +217,14 @@ class SMSTelegramClient(TelegramClient):
         group_id = tracked_message.group_id
         msg_id = tracked_message.msg_id
 
-        status_text = "✓✓" if status == "delivered" else "❌"
-
         try:
             # Edit the original message to show status
             original_message = await self.get_messages(group_id, ids=msg_id)
             if original_message:
-                await self.edit_message(
-                    entity=group_id, message=msg_id, text=f"{original_message.text} {status_text}"
+                await self.send_message(
+                    entity=group_id, 
+                    reply_to=msg_id, 
+                    message=status
                 )
                 logger.info(f"Message status updated to {status} for message {message_id}")
         except Exception as e:
@@ -244,14 +240,8 @@ class SMSTelegramClient(TelegramClient):
         # to extract the phone number from the topic title or from messages in the topic
         phone_number = None
 
-        # Search for the phone number mapped to this topic
-        for key in self.db.namespace.list_keys():
-            if key.startswith(f"thread:{group_id}:"):
-                _, _, phone = key.split(":", 2)
-                stored_topic_id = self.db.get_thread_topic(group_id, phone)
-                if stored_topic_id == topic_id:
-                    phone_number = phone
-                    break
+        # Get the phone number directly using the reverse mapping
+        phone_number = self.db.get_phone_from_topic(group_id, topic_id)
 
         if not phone_number:
             await self.send_message(
@@ -262,15 +252,15 @@ class SMSTelegramClient(TelegramClient):
             return
 
         # Get the device IMEI for this group
-        imei = self.db.get_group_device(group_id)
+        imei = self.db.get_device_from_group(group_id)
         if not imei:
             await self.send_message(
                 entity=group_id, reply_to=msg_id, message="Error: No device is bound to this group."
             )
             return
 
-        # Send the SMS via MQTT
-        message_id = self.mqtt_client.send_sms(imei, phone_number, text)
+        # Send the SMS via MQTT - now using the async method
+        message_id = await self.mqtt_client.send_sms(imei, phone_number, text)
         if message_id:
             # Track the message for status updates
             self.db.track_message(message_id, group_id, msg_id)

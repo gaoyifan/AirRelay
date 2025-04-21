@@ -24,9 +24,11 @@ classifiers = [
 dependencies = [
     "telethon>=1.27.0",
     "paho-mqtt>=2.0.0",
+    "aiomqtt>=2.3.2",
     "workers-kv.py>=1.2.2",
     "python-dotenv>=1.0.0",
     "pydantic>=2.0.0",
+    "cachetools>=5.5.2",
 ]
 
 [project.optional-dependencies]

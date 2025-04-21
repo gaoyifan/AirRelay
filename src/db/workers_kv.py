@@ -1,79 +1,154 @@
-from typing import Optional
+from typing import Optional, Dict, Any, List
 
 import workers_kv
+from cachetools import LRUCache
 
-from src.models.schemas import MessageTracking, PhoneTopicMapping
+from src.models.schemas import MessageTracking
+
+
+class CachedNamespace:
+    """
+    A cache wrapper for workers_kv.Namespace that uses an LRUCache to avoid 
+    frequent remote database requests.
+    """
+    def __init__(self, namespace: workers_kv.Namespace, cache_size: int = 65536):
+        self.namespace = namespace
+        self.cache = LRUCache(maxsize=cache_size)
+    
+    def read(self, key: str) -> Any:
+        """Read a value from cache or underlying namespace if not in cache"""
+        if key in self.cache:
+            return self.cache[key]
+        
+        value = self.namespace.read(key)
+        if value is not None:
+            self.cache[key] = value
+        return value
+    
+    def write(self, data: Dict[str, Any]) -> None:
+        """Write data to underlying namespace and update cache"""
+        self.namespace.write(data)
+        
+        # Update cache with new values
+        for key, value in data.items():
+            self.cache[key] = value
+    
+    def delete_one(self, key: str) -> None:
+        """Delete a key from underlying namespace and cache"""
+        self.namespace.delete_one(key)
+        
+        # Remove from cache if present
+        if key in self.cache:
+            del self.cache[key]
+    
+    def delete_many(self, keys: List[str]) -> None:
+        """Delete multiple keys from underlying namespace and cache"""
+        self.namespace.delete_many(keys)
+        
+        # Remove from cache if present
+        for key in keys:
+            if key in self.cache:
+                del self.cache[key]
+                
+    def clear_cache(self) -> None:
+        """Clear the in-memory cache without affecting the underlying namespace data"""
+        self.cache.clear()
 
 
 class Database:
-    def __init__(self, account_id: str, namespace_id: str, api_key: str):
-        self.namespace = workers_kv.Namespace(
+    def __init__(self, account_id: str, namespace_id: str, api_key: str, cache_size: int = 1000):
+        namespace = workers_kv.Namespace(
             account_id=account_id, namespace_id=namespace_id, api_key=api_key
         )
+        self.namespace = CachedNamespace(namespace, cache_size=cache_size)
 
-    def get_device_group(self, imei: str) -> Optional[int]:
+    def get_group_from_device(self, imei: str) -> Optional[int]:
         """Get Telegram group ID for a device IMEI"""
-        key = f"device:{imei}"
+        key = f"device_to_group:{imei}"
         value = self.namespace.read(key)
         return int(value) if value else None
 
-    def set_device_group(self, imei: str, group_id: Optional[int]) -> None:
-        """Map device IMEI to a Telegram group"""
-        key = f"device:{imei}"
-        if group_id is None:
-            self.namespace.delete_one(key)
-        else:
-            self.namespace.write({key: str(group_id)})
+    def get_device_from_group(self, group_id: int) -> Optional[str]:
+        """Get device IMEI for a Telegram group"""
+        key = f"group_to_device:{group_id}"
+        return self.namespace.read(key)
 
-    def get_thread_topic(self, group_id: int, phone: str) -> Optional[int]:
+    def map_device_group(self, imei: str, group_id: int) -> None:
+        """
+        Map a device to a Telegram group and create the reverse mapping
+        
+        This method maintains both:
+        - device_to_group:{imei} -> group_id
+        - group_to_device:{group_id} -> imei
+        """
+        self.namespace.write({
+            f"device_to_group:{imei}": str(group_id),
+            f"group_to_device:{group_id}": imei
+        })
+    
+    def delete_device_group(self, imei: str, group_id: int) -> None:
+        """Remove device-group mappings for given parameters"""
+        self.namespace.delete_many([
+            f"device_to_group:{imei}",
+            f"group_to_device:{group_id}"
+        ])
+
+    def get_topic_from_phone(self, group_id: int, phone: str) -> Optional[int]:
         """Get topic ID for a phone number in a group"""
-        key = f"thread:{group_id}:{phone}"
+        key = f"phone_to_topic:{group_id}:{phone}"
         value = self.namespace.read(key)
         if isinstance(value, dict) and "topic_id" in value:
             return int(value["topic_id"])
         return int(value) if value else None
 
-    def set_thread_topic(
-        self, group_id: int, phone: str, topic_id: int, topic_title: str = None
-    ) -> None:
-        """Map a phone number to a topic in a group"""
-        key = f"thread:{group_id}:{phone}"
-        mapping = PhoneTopicMapping(
-            group_id=group_id,
-            topic_id=topic_id,
-            topic_title=topic_title or f"SMS: {phone}",
-            last_activity=int(__import__("time").time()),
-        )
-        self.namespace.write({key: mapping.dict()})
-
-    def get_group_device(self, group_id: int) -> Optional[str]:
-        """Get device IMEI for a Telegram group (reverse lookup)"""
-        key = f"group:{group_id}"
+    def get_phone_from_topic(self, group_id: int, topic_id: int) -> Optional[str]:
+        """Get phone number for a topic ID in a group (reverse lookup)"""
+        key = f"topic_to_phone:{group_id}:{topic_id}"
         return self.namespace.read(key)
 
-    def set_group_device(self, group_id: int, imei: Optional[str]) -> None:
-        """Map a Telegram group to a device IMEI"""
-        key = f"group:{group_id}"
-        if imei is None:
-            self.namespace.delete_one(key)
-        else:
-            self.namespace.write({key: imei})
+    def map_phone_topic(
+        self, group_id: int, phone: str, topic_id: int
+    ) -> None:
+        """
+        Map a phone number to a topic in a group and create the reverse mapping
+        
+        This method maintains both:
+        - phone_to_topic:{group_id}:{phone} -> topic_id
+        - topic_to_phone:{group_id}:{topic_id} -> phone
+        """
+        self.namespace.write({
+            f"phone_to_topic:{group_id}:{phone}": str(topic_id),
+            f"topic_to_phone:{group_id}:{topic_id}": phone
+        })
+
+    def remove_phone_topic(
+        self, group_id: int, phone: str, topic_id: int
+    ) -> None:
+        """Remove phone-to-topic and topic-to-phone mappings for given parameters"""
+        self.namespace.delete_many([
+            f"phone_to_topic:{group_id}:{phone}",
+            f"topic_to_phone:{group_id}:{topic_id}"
+        ])
 
     def track_message(self, message_id: str, group_id: int, msg_id: int) -> None:
         """Track an outgoing message for status updates"""
         key = f"msg:{message_id}"
         tracking = MessageTracking(group_id=group_id, msg_id=msg_id)
-        self.namespace.write({key: tracking.dict()})
+        self.namespace.write({key: tracking.model_dump_json()})
 
     def get_tracked_message(self, message_id: str) -> Optional[MessageTracking]:
         """Get tracking info for a message"""
         key = f"msg:{message_id}"
         data = self.namespace.read(key)
         if data:
-            return MessageTracking(**data)
+            return MessageTracking.model_validate(data)
         return None
 
     def delete_tracked_message(self, message_id: str) -> None:
         """Delete tracking info for a message"""
         key = f"msg:{message_id}"
         self.namespace.delete_one(key)
+        
+    def clear_cache(self) -> None:
+        """Clear the in-memory cache"""
+        self.namespace.clear_cache()

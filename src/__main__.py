@@ -10,11 +10,11 @@ from pydantic import ValidationError
 from src.bot.telegram import SMSTelegramClient
 from src.db.workers_kv import Database
 from src.models.schemas import Settings
-from src.mqtt.client import MQTTClient
+from src.mqtt.client import AsyncMQTTClient
 
 # Set up logging
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.DEBUG
 )
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ class AirRelay:
         )
 
         # Initialize MQTT client
-        self.mqtt = MQTTClient(
+        self.mqtt = AsyncMQTTClient(
             telegram_client=self.tg,
             host=self.settings.mqtt_host,
             port=self.settings.mqtt_port,
@@ -86,7 +86,7 @@ class AirRelay:
         self.tg.register_handlers()
 
         # Connect MQTT client
-        self.mqtt.connect()
+        await self.mqtt.connect()
 
         logger.info("AirRelay setup completed")
 
@@ -101,7 +101,7 @@ class AirRelay:
     async def stop(self):
         """Stop all components of the bridge"""
         # Disconnect MQTT client
-        self.mqtt.disconnect()
+        await self.mqtt.disconnect()
 
         # Disconnect Telegram client
         await self.tg.disconnect()
