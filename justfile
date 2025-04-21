@@ -37,13 +37,26 @@ check: fmt typecheck test
 docker-build:
     docker build -t air-relay .
 
+# Generate self-signed certificates for TLS if they don't exist
+generate-certs:
+    #!/bin/bash
+    mkdir -p certs
+    if [ ! -f "certs/server.key" ] || [ ! -f "certs/server.crt" ]; then
+        echo "Generating self-signed certificates..."
+        openssl req -x509 -newkey rsa:2048 -keyout certs/server.key -out certs/server.crt -days 365 -nodes -subj "/CN=localhost"
+        echo "Certificates generated successfully."
+    fi
+
 # Start services with Docker Compose
-docker-up:
-    docker-compose up -d
+docker-up: generate-certs
+    docker-compose up -d --build
 
 # Stop Docker Compose services
 docker-down:
     docker-compose down
+
+docker-debug: docker-up
+    docker compose logs -f
 
 # Initialize MQTT broker configuration
 init-mqtt:
