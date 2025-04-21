@@ -2,7 +2,7 @@
 
 ## MQTT Interface
 
-The system uses MQTT over WebSocket for communication with the Air780E device. The following topics and message formats are defined:
+The system uses MQTT (over TCP) for communication with the Air780E device. The following topics and message formats are defined:
 
 ### Topics
 
@@ -96,7 +96,7 @@ The system interacts with Telegram via the Telethon library, which uses the MTPr
 | `/start` | None | Initializes the bot and displays help information |
 | `/bind` | `<imei>` | Binds a device to the current Telegram group |
 | `/unbind` | `<imei>` | Removes a device binding from the group |
-| `/status` | None | Shows the status of all devices bound to the group |
+| `/status` | None | Shows the status of the device bound to this group |
 | `/help` | None | Displays available commands and usage information |
 
 ### Message Handling
@@ -108,8 +108,8 @@ The system interacts with Telegram via the Telethon library, which uses the MTPr
 
 2. **Telegram Replies to SMS**:
    - Any reply within a topic is sent back to the original SMS sender
-   - System automatically extracts the target phone number from the topic
-   - Text, photos, and audio can be converted to SMS format
+   - The system automatically extracts the target phone number from the topic
+   - Replies are sent as SMS messages (text only).
 
 ## Cloudflare Workers KV API
 
@@ -118,20 +118,24 @@ The system uses Cloudflare Workers KV for persistent storage of mapping relation
 ### Key-Value Structure
 
 1. **Device to Telegram Group**
-   - Key: `device:<imei>`
-   - Value: `tg_group_id`
+   - Key: `device_to_group:<imei>`
+   - Value: Telegram group ID
 
-2. **Conversation Thread Mapping**
-   - Key: `thread:<tg_group_id>:<phone_number>`
-   - Value: `topic_id`
+2. **Telegram Group to Device**
+   - Key: `group_to_device:<group_id>`
+   - Value: Device IMEI
 
-3. **Reverse Device Lookup**
-   - Key: `group:<tg_group_id>`
-   - Value: `imei`
+3. **Phone to Topic Mapping**
+   - Key: `phone_to_topic:<group_id>:<phone_number>`
+   - Value: Topic ID
 
-4. **Message Tracking**
+4. **Topic to Phone Mapping**
+   - Key: `topic_to_phone:<group_id>:<topic_id>`
+   - Value: Phone number
+
+5. **Message Tracking**
    - Key: `msg:<message_id>`
-   - Value: `{"group_id": tg_group_id, "msg_id": tg_msg_id}`
+   - Value: JSON object with `group_id` and `msg_id` fields.
 
 ## API Implementation
 
@@ -139,8 +143,11 @@ The system uses Cloudflare Workers KV for persistent storage of mapping relation
 
 ```
 telethon>=1.27.0
-paho-mqtt>=2.0.0
+aiomqtt>=2.3.2
+python-dotenv>=1.0.0
+pydantic>=2.0.0
 workers-kv.py>=1.2.2
+cachetools>=5.5.2
 ```
 
 ### Environment Variables
