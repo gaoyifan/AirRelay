@@ -135,7 +135,6 @@ class AsyncMQTTClient:
                             status = DeviceStatus(**payload)
                             # Store the device status timestamp
                             self.device_status[status.imei] = time.time()
-                            logger.debug(f"Updated device {status.imei} heartbeat timestamp")
                         except Exception as e:
                             logger.error(f"Invalid device status format: {e}")
                     else:
@@ -186,10 +185,10 @@ class AsyncMQTTClient:
             logger.error(f"Failed to publish message: {e}")
             return None
 
-    def get_device_last_seen(self, imei: str) -> float:
+    def get_device_last_seen(self, imei: str | int) -> float:
         """Get the timestamp of the last heartbeat for a device
         
         Returns:
             Timestamp of the last heartbeat, or None if device never seen
         """
-        return self.device_status.get(imei)
+        return self.device_status.get(str(imei))
