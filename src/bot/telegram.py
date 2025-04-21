@@ -1,5 +1,6 @@
 import logging
-from typing import Optional
+from typing import Optional, Callable
+import functools
 
 from telethon import TelegramClient, events
 from telethon.tl.functions.channels import CreateForumTopicRequest
@@ -45,6 +46,8 @@ class SMSTelegramClient(TelegramClient):
                             ("unlinkphone", "Remove a phone number binding"),
                             ("phoneinfo", "Show phone number bound to current topic"),
                             ("status", "Show system status"),
+                            ("add_admin", "Add a user as an admin"),
+                            ("list_admins", "List all admin users"),
                             ("help", "Show help message"),
                         ]
                     ],
@@ -73,9 +76,12 @@ class SMSTelegramClient(TelegramClient):
                 # It's a reply in a topic, handle it as an SMS reply
                 await self._handle_sms_reply(event.chat_id, topic_id, event.id, event.text)
 
-        # Register command handlers using decorators
-        @events.register(events.NewMessage(pattern="^/start"))
+        # Register command handlers
+        @self.on(events.NewMessage(pattern="^/start"))
         async def handle_start_command(event):
+            if not await self._check_admin_permission(event):
+                return
+            
             await self._send_response(
                 event,
                 "SMS to Telegram Bridge Bot\n\n"
@@ -87,12 +93,17 @@ class SMSTelegramClient(TelegramClient):
                 "/unlinkphone <phone> - Remove a phone number binding\n"
                 "/phoneinfo - Show phone number bound to current topic\n"
                 "/status - Show system status\n"
+                "/add_admin [@username] - Add an admin user\n"
+                "/list_admins - List all admin users\n"
                 "/help - Show this help message"
             )
             raise events.StopPropagation
 
-        @events.register(events.NewMessage(pattern="^/linkdevice"))
+        @self.on(events.NewMessage(pattern="^/linkdevice"))
         async def handle_bind_device_command(event):
+            if not await self._check_admin_permission(event):
+                return
+                
             # Extract IMEI from command
             parts = event.text.split(maxsplit=1)
             if len(parts) < 2:
@@ -123,8 +134,11 @@ class SMSTelegramClient(TelegramClient):
 
             await self._send_response(event, f"Device {imei} has been bound to this group successfully.")
 
-        @events.register(events.NewMessage(pattern="^/unlinkdevice"))
+        @self.on(events.NewMessage(pattern="^/unlinkdevice"))
         async def handle_unbind_device_command(event):
+            if not await self._check_admin_permission(event):
+                return
+                
             group_id = event.chat_id
 
             # Check if IMEI was specified
@@ -148,8 +162,11 @@ class SMSTelegramClient(TelegramClient):
 
             await self._send_response(event, f"Device {imei} has been unbound from this group.")
 
-        @events.register(events.NewMessage(pattern="^/linkphone"))
+        @self.on(events.NewMessage(pattern="^/linkphone"))
         async def handle_bind_phone_command(event):
+            if not await self._check_admin_permission(event):
+                return
+                
             # Extract phone number from command
             parts = event.text.split(maxsplit=1)
             if len(parts) < 2:
@@ -185,8 +202,11 @@ class SMSTelegramClient(TelegramClient):
 
             await self._send_response(event, f"Phone number {phone_number} has been bound to the topic successfully.")
 
-        @events.register(events.NewMessage(pattern="^/unlinkphone"))
+        @self.on(events.NewMessage(pattern="^/unlinkphone"))
         async def handle_unbind_phone_command(event):
+            if not await self._check_admin_permission(event):
+                return
+                
             group_id = event.chat_id
             
             # Get current topic ID using the helper method
@@ -218,8 +238,11 @@ class SMSTelegramClient(TelegramClient):
                 logger.error(f"Failed to unbind phone: {e}")
                 await self._send_response(event, f"Failed to unbind phone number: {str(e)}")
 
-        @events.register(events.NewMessage(pattern="^/status"))
+        @self.on(events.NewMessage(pattern="^/status"))
         async def handle_status_command(event):
+            if not await self._check_admin_permission(event):
+                return
+                
             group_id = event.chat_id
 
             # Get the device for this group
@@ -232,7 +255,7 @@ class SMSTelegramClient(TelegramClient):
             # last seen time, etc., if that information is available
             await self._send_response(event, f"Device IMEI: {imei}\nStatus: Active")
 
-        @events.register(events.NewMessage(pattern="^/help"))
+        @self.on(events.NewMessage(pattern="^/help"))
         async def handle_help_command(event):
             await self._send_response(
                 event,
@@ -243,12 +266,17 @@ class SMSTelegramClient(TelegramClient):
                 "/unlinkphone <phone> - Remove a phone number binding\n"
                 "/phoneinfo - Show phone number bound to current topic\n"
                 "/status - Show system status\n"
+                "/add_admin [@username] - Add an admin user\n"
+                "/list_admins - List all admin users\n"
                 "/help - Show this help message"
             )
             raise events.StopPropagation
 
-        @events.register(events.NewMessage(pattern="^/phoneinfo"))
+        @self.on(events.NewMessage(pattern="^/phoneinfo"))
         async def handle_phone_info_command(event):
+            if not await self._check_admin_permission(event):
+                return
+                
             group_id = event.chat_id
             
             # Get current topic ID using the helper method
@@ -265,16 +293,94 @@ class SMSTelegramClient(TelegramClient):
             else:
                 await self._send_response(event, "No phone number is bound to this topic.")
 
+        @self.on(events.NewMessage(pattern="^/add_admin"))
+        async def handle_add_admin_command(event):
+            # Special handling for first admin
+            if not self.db.has_admins():
+                user_id = event.sender_id
+                success = self.db.add_admin(user_id)
+                if success:
+                    await self._send_response(event, f"You have been added as the first admin (User ID: {user_id}).")
+                else:
+                    await self._send_response(event, "Failed to add you as admin. Please try again.")
+                return
+            
+            # Normal admin permission check
+            if not await self._check_admin_permission(event):
+                return
+                
+            parts = event.text.split(maxsplit=1)
+            
+            # Case 1: no username specified - add sender as admin
+            if len(parts) < 2:
+                user_id = event.sender_id
+                
+                # Add the sender as an admin
+                if self.db.is_admin(user_id):
+                    await self._send_response(event, "You are already an admin.")
+                    return
+                    
+                success = self.db.add_admin(user_id)
+                if success:
+                    await self._send_response(event, f"You have been added as an admin (User ID: {user_id}).")
+                else:
+                    await self._send_response(event, "Failed to add you as admin.")
+                return
+            
+            # Case 2: Username specified - add that user as admin
+            username = parts[1].strip()
+            if username.startswith('@'):
+                username = username[1:]  # Remove @ symbol if present
+                
+            try:
+                # Resolve the username to a user entity
+                user = await self.get_entity(username)
+                if not user or not hasattr(user, 'id'):
+                    await self._send_response(event, f"Could not find user: {username}")
+                    return
+                    
+                # Check if already admin
+                if self.db.is_admin(user.id):
+                    await self._send_response(event, f"User {username} is already an admin.")
+                    return
+                    
+                # Add as admin
+                success = self.db.add_admin(user.id)
+                if success:
+                    await self._send_response(event, f"User {username} (ID: {user.id}) has been added as an admin.")
+                else:
+                    await self._send_response(event, f"Failed to add {username} as admin.")
+            except Exception as e:
+                logger.error(f"Error adding admin: {e}")
+                await self._send_response(event, f"Error adding admin: {str(e)}")
+                
+        @self.on(events.NewMessage(pattern="^/list_admins"))
+        async def handle_list_admins_command(event):
+            if not await self._check_admin_permission(event):
+                return
+                
+            admins = self.db.get_admins()
+            
+            if not admins:
+                await self._send_response(event, "No admins are currently registered.")
+                return
+                
+            admin_list = []
+            for admin_id in admins:
+                try:
+                    admin = await self.get_entity(admin_id)
+                    if hasattr(admin, 'username') and admin.username:
+                        admin_list.append(f"@{admin.username} (ID: {admin_id})")
+                    else:
+                        admin_list.append(f"User ID: {admin_id}")
+                except Exception:
+                    admin_list.append(f"User ID: {admin_id}")
+                    
+            admin_text = "\n".join(admin_list)
+            await self._send_response(event, f"Admin users:\n{admin_text}")
+
         # Add all the event handlers
         self.add_event_handler(handle_new_message)
-        self.add_event_handler(handle_start_command)
-        self.add_event_handler(handle_bind_device_command)
-        self.add_event_handler(handle_unbind_device_command)
-        self.add_event_handler(handle_bind_phone_command)
-        self.add_event_handler(handle_unbind_phone_command)
-        self.add_event_handler(handle_status_command)
-        self.add_event_handler(handle_help_command)
-        self.add_event_handler(handle_phone_info_command)
 
         logger.info("Telegram event handlers registered")
 
@@ -420,3 +526,21 @@ class SMSTelegramClient(TelegramClient):
             await self.send_message(
                 entity=group_id, reply_to=msg_id, message="Failed to send SMS message."
             )
+
+    async def _check_admin_permission(self, event) -> bool:
+        """Helper method to check if user has admin permission"""
+        # If there are no admins and this is add_admin command, allow it
+        if not self.db.has_admins() and event.text.startswith("/add_admin"):
+            return True
+            
+        # For help command, always allow
+        if event.text.startswith("/help"):
+            return True
+            
+        # Otherwise check admin status
+        user_id = event.sender_id
+        if not self.db.is_admin(user_id):
+            await self._send_response(event, "This command requires admin privileges.")
+            return False
+            
+        return True

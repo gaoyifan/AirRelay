@@ -147,6 +147,61 @@ class Database:
         key = f"msg:{message_id}"
         self.namespace.delete_one(key)
         
+    # Admin management methods
+    def is_admin(self, user_id: int) -> bool:
+        """Check if a user is an admin"""
+        key = f"admins"
+        admins = self.namespace.read(key)
+        if not admins:
+            return False
+        
+        try:
+            admin_list = [int(admin_id) for admin_id in admins.split(',')]
+            return user_id in admin_list
+        except Exception:
+            return False
+    
+    def add_admin(self, user_id: int) -> bool:
+        """Add a user as an admin"""
+        key = f"admins"
+        admins = self.namespace.read(key)
+        
+        if not admins:
+            # First admin - just add the user
+            self.namespace.write({key: str(user_id)})
+            return True
+        
+        try:
+            admin_list = [int(admin_id) for admin_id in admins.split(',')]
+            if user_id in admin_list:
+                # Already an admin
+                return False
+                
+            admin_list.append(user_id)
+            self.namespace.write({key: ",".join(str(admin_id) for admin_id in admin_list)})
+            return True
+        except Exception:
+            return False
+            
+    def has_admins(self) -> bool:
+        """Check if there are any admins registered"""
+        key = f"admins"
+        admins = self.namespace.read(key)
+        return bool(admins)
+    
+    def get_admins(self) -> List[int]:
+        """Get list of all admin user IDs"""
+        key = f"admins"
+        admins = self.namespace.read(key)
+        
+        if not admins:
+            return []
+            
+        try:
+            return [int(admin_id) for admin_id in admins.split(',')]
+        except Exception:
+            return []
+        
     def clear_cache(self) -> None:
         """Clear the in-memory cache"""
         self.namespace.clear_cache()
