@@ -1,221 +1,201 @@
-# AirRelay - SMS to Telegram Bridge
+# AirRelay - 短信转发到 Telegram 的桥接器
+
+AirRelay 是一个简单的系统，让您可以在 Telegram 中接收和回复短信。它将您的 Air780E 设备连接到 Telegram 群组，按电话号码将对话组织到不同的主题中。
+
+## 目录
+
+- [概述](#概述)
+- [特性](#特性)
+- [要求](#要求)
+- [快速开始](#快速开始)
+- [配置](#配置)
+- [设备设置](#设备设置)
+- [Telegram 设置](#telegram-设置)
+- [机器人命令](#机器人命令)
+- [故障排除](#故障排除)
+- [许可证](#许可证)
+
+## 概述
+
+AirRelay 桥接短信和 Telegram 群组：
+
+1. **Air780E 硬件**接收短信并将其发送到桥接器
+2. **AirRelay 桥接器**将消息转发到您的 Telegram 群组
+3. **在 Telegram 中回复消息**以发送短信回复
+
+![系统概述](docs/system_overview.md)
+
+## 特性
+
+- **在 Telegram 中阅读短信**：所有收到的短信都会显示在您的 Telegram 群组中
+- **通过 Telegram 回复**：直接从 Telegram 回复短信
+- **组织对话**：每个电话号码都有自己的主题
+- **设备状态**：监控设备的连接和信号强度
+- **多个管理员**：添加其他 Telegram 用户作为管理员
+- **送达状态**：查看短信何时送达
+
+## 要求
+
+- **硬件**：
+  - Air780E
+  - 具有短信和数据功能的 SIM 卡（需要移动网络连接）
+  - USB 电源
+
+- **软件**：
+  - 用于运行桥接器的 Docker
+  - [Just](https://just.systems/) 命令运行器（可选，用于方便的命令）
+
+- **账户**：
+  - Telegram API 凭据（从 [Telegram API 开发工具](https://my.telegram.org/apps) 获取）
+  - Telegram 机器人（通过 [BotFather](https://t.me/BotFather) 创建）
+  - Cloudflare Workers KV 账户（[在此注册](https://developers.cloudflare.com/workers/wrangler/workers-kv/)）
+
+- **网络**：
+  - 具有公共 IP 地址的 MQTT 代理，可由 Air780E 设备访问
+
+## 快速开始
+
+1. **克隆仓库**：
+   ```bash
+   git clone https://github.com/gaoyifan/AirRelay.git
+   cd AirRelay
+   ```
+
+2. **配置设置**：
+   ```bash
+   cp .env.example .env
+   # 编辑 .env 填入您的凭据
+   ```
+
+3. **启动服务**：
+   ```bash
+   just docker-up
+   ```
+   如果您未安装 Just，可以直接使用 Docker Compose：
+   ```bash
+   docker compose up -d
+   ```
+
+4. **查看日志**（可选）：
+   ```bash
+   just docker-debug
+   ```
+   或者不使用 Just：
+   ```bash
+   docker compose logs -f
+   ```
+
+## 配置
+
+使用您的凭据编辑 `.env` 文件：
+
+### Telegram 设置
+- `TG_API_ID`：您的 Telegram API ID（[在此获取](https://my.telegram.org/apps)）
+- `TG_API_HASH`：您的 Telegram API Hash（[在此获取](https://my.telegram.org/apps)）
+- `TG_BOT_TOKEN`：您从 [BotFather](https://t.me/BotFather) 获取的机器人令牌
+
+### MQTT 设置
+- `MQTT_HOST`：MQTT 代理主机名（默认：localhost）
+- `MQTT_PORT`：MQTT 代理端口（默认：8883）
+- `MQTT_USER`：MQTT 用户名（可选）
+- `MQTT_PASSWORD`：MQTT 密码（可选）
+- `MQTT_USE_TLS`：为 MQTT 使用 TLS（默认：true）
 
-AirRelay is a service that forwards SMS messages between a Luat Air780E device and Telegram Group Forums.
+### EMQX 仪表板
+- `EMQX_DASHBOARD_USER`：EMQX 仪表板用户名
+- `EMQX_DASHBOARD_PASSWORD`：EMQX 仪表板密码
 
-## Features
+有关详细的 EMQX 配置，请参阅 [EMQX 文档](https://www.emqx.io/docs/en/v5.0/configuration/configuration.html)。
 
-- Bidirectional message forwarding between SMS and Telegram
-- Topic-based organization of SMS conversations in Telegram
-- Support for device status monitoring
-- Easy device setup with MQTT over WebSocket
-- Secure storage using Cloudflare Workers KV
+### Cloudflare Workers KV
+- `CF_ACCOUNT_ID`：您的 Cloudflare 账户 ID
+- `CF_NAMESPACE_ID`：您的 KV 命名空间 ID
+- `CF_API_KEY`：您的 Cloudflare API 密钥
 
-## Prerequisites
+## 设备设置
 
-- Python 3.12+
-- Telegram Bot created with API credentials (via @BotFather)
-- Cloudflare Workers KV account
-- MQTT broker with WebSocket support
-- Air780E device configured for MQTT communication
+### 所需硬件
+- Air780E
+- 具有短信功能的 SIM 卡
+- USB 电源
 
-## Installation
+### 设置步骤
 
-### Using Rye (Recommended)
+1. **刷入固件**：
+   - 下载 [LuaTools](https://wiki.luatos.com/boardGuide/flash.html)
+   - 将 `luatos/main.lua` 和 `luatos/config.lua` 上传到您的 Air780E
 
-This project uses [Rye](https://rye-up.com) for Python project management.
+2. **在 `config.lua` 文件中配置 MQTT**：
+   ```lua
+   return {
+       host = "your.mqtt.server.com", -- 您的服务器 IP 或域名
+       port = 8883,                   -- MQTT 端口
+       isssl = true,                  -- 使用 SSL/TLS
+       user = "your_username",        -- MQTT 用户名
+       pass = "your_password"         -- MQTT 密码
+   }
+   ```
 
-1. Install Rye following the [official instructions](https://rye-up.com/guide/installation/)
+3. **开启**设备并检查是否成功连接
 
-2. Clone the repository:
+4. **找到您的 IMEI 号码**：
+   - 将 Air780E 连接到 LuaTools
+   - 设备日志可在 LuaTools 的主界面中查看
+   - 查找包含 "IMEI:" 的日志条目（通常在启动时出现）
+   - 将设备链接到 Telegram 时需要使用此 IMEI
 
-```bash
-git clone https://github.com/yourusername/air-relay.git
-cd air-relay
-```
+## Telegram 设置
 
-3. Set up the project with Rye:
+1. **创建一个启用论坛主题的 Telegram 群组**
+   - 这需要创建一个超级群组并在群组设置中启用"主题"
+   - 仅在 Telegram Desktop、移动应用或网页版上可用
 
-```bash
-rye sync
-```
+2. **将您的机器人**添加到群组
 
-4. Copy the example environment file and edit it with your credentials:
+3. **将机器人设为管理员**，具有以下权限：
+   - 仅需要"管理主题"权限
+   - 其他权限可保持禁用
 
-```bash
-cp .env.example .env
-# Edit .env with your credentials
-```
+4. **使用 `/add_admin` 命令初始化管理员访问权限**
+   - 第一个运行此命令的人将成为管理员
 
-5. Run the application:
+5. **使用 `/link_device <imei>` 链接您的设备**（替换为您设备的 IMEI）
+   - 使用您在 LuaTools 日志中找到的 IMEI
 
-```bash
-rye run python -m src
-```
+6. **测试设置**，向您设备的号码发送短信
+   - 它应该出现在您的 Telegram 群组中
 
-### Using pip (Alternative)
+## 机器人命令
 
-1. Clone the repository:
+- `/start` - 介绍和帮助信息
+- `/help` - 显示可用命令
+- `/link_device <imei>` - 将设备连接到此群组
+- `/unlink_device [imei]` - 移除设备连接
+- `/link_phone <phone>` - 为电话号码创建主题
+- `/unlink_phone [phone]` - 移除电话号码主题
+- `/phone_info` - 显示当前主题链接的电话号码
+- `/status` - 检查设备是否在线及信号强度
+- `/add_admin [@username]` - 添加另一个管理员用户
+- `/list_admins` - 显示所有管理员用户
 
-```bash
-git clone https://github.com/yourusername/air-relay.git
-cd air-relay
-```
+## 故障排除
 
-2. Install the required dependencies:
+### 桥接器问题
 
-```bash
-pip install -r requirements.txt
-```
+- **检查日志**：运行 `just docker-debug` 查看错误信息
+- **Telegram 凭据**：验证 API ID、Hash 和机器人令牌
+- **Cloudflare 访问**：确保您的 API 密钥具有正确的权限
+- **机器人权限**：机器人必须是您 Telegram 群组中的管理员，并具有"管理主题"权限
+- **主题已启用**：确保您的 Telegram 群组已启用主题功能
 
-3. Copy the example environment file and edit it with your credentials:
+### 设备问题
 
-```bash
-cp .env.example .env
-# Edit .env with your credentials
-```
+- **网络连接**：检查 SIM 卡和信号强度
+- **MQTT 连接**：验证您的 MQTT 代理地址和凭据
+- **SIM 卡**：确保 SIM 卡具有短信功能并启用移动数据
+- **配置文件**：仔细检查 `config.lua` 文件中的值
+- **IMEI 号码**：验证您在 `/link_device` 命令中使用了正确的 IMEI
 
-4. Run the application:
+## 许可证
 
-```bash
-python -m src
-```
-
-## Configuration
-
-Edit the `.env` file with the following information:
-
-- **Telegram Configuration**
-  - `TG_API_ID`: Your Telegram API ID
-  - `TG_API_HASH`: Your Telegram API Hash
-  - `TG_BOT_TOKEN`: Your Bot Token from BotFather
-
-- **MQTT Configuration**
-  - `MQTT_HOST`: MQTT broker hostname
-  - `MQTT_PORT`: MQTT broker port (default: 8883)
-  - `MQTT_USER`: MQTT username (optional)
-  - `MQTT_PASSWORD`: MQTT password (optional)
-  - `MQTT_USE_TLS`: Use TLS for MQTT connection (default: true)
-
-- **Cloudflare Workers KV Configuration**
-  - `CF_ACCOUNT_ID`: Your Cloudflare account ID
-  - `CF_NAMESPACE_ID`: Your KV namespace ID
-  - `CF_API_KEY`: Your Cloudflare API key
-
-## Usage
-
-1. Add your bot to a Telegram group with forum topics enabled
-2. Run the `/bind <imei>` command in the group to bind your Air780E device
-3. Send SMS messages to your device's phone number
-4. Receive them in the Telegram group organized by sender
-5. Reply to messages in Telegram to send SMS responses
-
-## Bot Commands
-
-- `/start` - Initialize the bot and show help
-- `/bind <imei>` - Bind a device to the current group
-- `/unbind [imei]` - Remove a device binding
-- `/status` - Show system status
-- `/help` - Show command list
-
-## Device Setup
-
-See the [Device Integration Guide](docs/device_integration.md) for instructions on setting up your Air780E device.
-
-## Documentation
-
-Full documentation is available in the `docs/` directory:
-
-- [System Overview](docs/system_overview.md)
-- [API & Protocol Documentation](docs/api_protocol.md)
-- [Implementation Guide](docs/implementation_guide.md)
-- [Device Integration](docs/device_integration.md)
-- [Telethon Group Topic Guide](docs/telethon_group_topic.md)
-
-## Development
-
-This project uses [Just](https://just.systems/) as a command runner. To see all available commands:
-
-```bash
-just
-```
-
-Common development commands:
-
-```bash
-# Format code using autoflake, isort, and black
-just fmt
-
-# Run tests
-just test
-
-# Type check with mypy
-just typecheck
-
-# Run a complete check (formatting, type checking, tests)
-just check
-
-# Clean up Python cache files
-just clean
-```
-
-You can also use Rye for dependency management:
-
-```bash
-# Update dependencies
-just update-deps
-```
-
-## License
-
-This project is licensed under the MIT License. 
-
-### MQTT Integration
-
-The system uses MQTT for communication with the Air780E devices. We've implemented two MQTT client options:
-
-#### 1. Synchronous MQTT Client (Legacy)
-
-Uses `paho-mqtt` directly with callbacks for handling messages. This is maintained for backward compatibility.
-
-#### 2. Asynchronous MQTT Client (Recommended)
-
-Uses `aiomqtt` for fully asynchronous operation with these advantages:
-- No callbacks, using modern Python async/await syntax
-- Simplified error handling
-- Graceful connection and disconnection
-- Better integration with asyncio applications
-- Cleaner code and reduced complexity
-
-### Usage Examples
-
-```python
-# Async MQTT Client
-async with AsyncMQTTClient(...) as client:
-    await client.subscribe("topic")
-    await client.publish("topic", payload)
-    async for message in client.messages:
-        print(message.payload)
-```
-
-### Requirements
-
-- Python 3.12+
-- paho-mqtt
-- aiomqtt
-- telethon
-- workers-kv.py
-- pydantic
-- dotenv
-
-### Setup and Installation
-
-1. Clone this repository
-2. Install dependencies: `rye sync`
-3. Set up environment variables (see `.env.example`)
-4. Run the application: `python -m src`
-
-### Testing
-
-Test scripts are available in the `tests` directory:
-- `test_async_mqtt.py`: Tests the async MQTT client
-- `test_incoming_sms.py`: Simulates an incoming SMS message 
+本项目采用 MIT 许可证。 
