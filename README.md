@@ -43,7 +43,6 @@ AirRelay 桥接短信和 Telegram 群组：
 
 - **软件**：
   - 用于运行桥接器的 Docker
-  - [Just](https://just.systems/) 命令运行器（可选，用于方便的命令）
 
 - **账户**：
   - Telegram API 凭据（从 [Telegram API 开发工具](https://my.telegram.org/apps) 获取）
@@ -69,18 +68,10 @@ AirRelay 桥接短信和 Telegram 群组：
 
 3. **启动服务**：
    ```bash
-   just docker-up
-   ```
-   如果您未安装 Just，可以直接使用 Docker Compose：
-   ```bash
    docker compose up -d
    ```
 
 4. **查看日志**（可选）：
-   ```bash
-   just docker-debug
-   ```
-   或者不使用 Just：
    ```bash
    docker compose logs -f
    ```
@@ -182,7 +173,7 @@ AirRelay 桥接短信和 Telegram 群组：
 
 ### 桥接器问题
 
-- **检查日志**：运行 `just docker-debug` 查看错误信息
+- **检查日志**：运行 `docker compose logs -f` 查看错误信息
 - **Telegram 凭据**：验证 API ID、Hash 和机器人令牌
 - **Cloudflare 访问**：确保您的 API 密钥具有正确的权限
 - **机器人权限**：机器人必须是您 Telegram 群组中的管理员，并具有"管理主题"权限

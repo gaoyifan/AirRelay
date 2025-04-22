@@ -43,7 +43,6 @@ AirRelay bridges SMS messages and Telegram groups:
 
 - **Software**:
   - Docker for running the bridge
-  - [Just](https://just.systems/) command runner (optional, for convenient commands)
 
 - **Accounts**:
   - Telegram API credentials (from [Telegram API Development Tools](https://my.telegram.org/apps))
@@ -69,18 +68,10 @@ AirRelay bridges SMS messages and Telegram groups:
 
 3. **Start services**:
    ```bash
-   just docker-up
-   ```
-   If you don't have Just installed, you can use Docker Compose directly:
-   ```bash
    docker compose up -d
    ```
 
 4. **Check logs** (optional):
-   ```bash
-   just docker-debug
-   ```
-   Or without Just:
    ```bash
    docker compose logs -f
    ```
@@ -182,7 +173,7 @@ For detailed EMQX configuration, see the [EMQX Documentation](https://www.emqx.i
 
 ### Bridge Issues
 
-- **Check logs**: Run `just docker-debug` to see error messages
+- **Check logs**: Run `docker compose logs -f` to see error messages
 - **Telegram credentials**: Verify API ID, Hash and Bot Token
 - **Cloudflare access**: Ensure your API key has correct permissions
 - **Bot permissions**: The bot must be an admin in your Telegram group with "Manage Topics" permission
