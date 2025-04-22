@@ -23,7 +23,7 @@ AirRelay 桥接短信和 Telegram 群组：
 2. **AirRelay 桥接器**将消息转发到您的 Telegram 群组
 3. **在 Telegram 中回复消息**以发送短信回复
 
-![系统概述](docs/system_overview.md)
+[系统概述](docs/system_overview.md)
 
 ## 特性
 

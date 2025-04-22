@@ -23,7 +23,7 @@ AirRelay bridges SMS messages and Telegram groups:
 2. **AirRelay bridge** forwards messages to your Telegram group
 3. **Reply to messages** in Telegram to send SMS responses back
 
-![System Overview](docs/system_overview.md)
+[System Overview](docs/system_overview.md)
 
 ## Features
 
