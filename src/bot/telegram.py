@@ -40,11 +40,11 @@ class SMSTelegramClient(TelegramClient):
                     commands=[
                         BotCommand(command=cmd, description=desc)
                         for cmd, desc in [
-                            ("linkdevice", "Bind a device to this group"),
-                            ("unlinkdevice", "Remove a device binding"),
-                            ("linkphone", "Bind a phone number to a topic"),
-                            ("unlinkphone", "Remove a phone number binding"),
-                            ("phoneinfo", "Show phone number bound to current topic"),
+                            ("link_device", "Bind a device to this group"),
+                            ("unlink_device", "Remove a device binding"),
+                            ("link_phone", "Bind a phone number to a topic"),
+                            ("unlink_phone", "Remove a phone number binding"),
+                            ("phone_info", "Show phone number bound to current topic"),
                             ("status", "Show system status"),
                             ("add_admin", "Add a user as an admin"),
                             ("list_admins", "List all admin users"),
@@ -87,11 +87,11 @@ class SMSTelegramClient(TelegramClient):
                 "SMS to Telegram Bridge Bot\n\n"
                 "Use this bot to forward SMS messages to Telegram and reply to them.\n\n"
                 "Available commands:\n"
-                "/linkdevice <imei> - Bind a device to this group\n"
-                "/unlinkdevice <imei> - Remove a device binding\n"
-                "/linkphone <phone> - Bind a phone number to a topic\n"
-                "/unlinkphone <phone> - Remove a phone number binding\n"
-                "/phoneinfo - Show phone number bound to current topic\n"
+                "/link_device <imei> - Bind a device to this group\n"
+                "/unlink_device <imei> - Remove a device binding\n"
+                "/link_phone <phone> - Bind a phone number to a topic\n"
+                "/unlink_phone <phone> - Remove a phone number binding\n"
+                "/phone_info - Show phone number bound to current topic\n"
                 "/status - Show system status\n"
                 "/add_admin [@username] - Add an admin user\n"
                 "/list_admins - List all admin users\n"
@@ -99,7 +99,7 @@ class SMSTelegramClient(TelegramClient):
             )
             raise events.StopPropagation
 
-        @self.on(events.NewMessage(pattern="^/linkdevice"))
+        @self.on(events.NewMessage(pattern="^/link_device"))
         async def handle_bind_device_command(event):
             if not await self._check_admin_permission(event):
                 return
@@ -108,7 +108,7 @@ class SMSTelegramClient(TelegramClient):
             parts = event.text.split(maxsplit=1)
             if len(parts) < 2:
                 await self._send_response(
-                    event, "Please specify the device IMEI. Usage: /linkdevice <imei>"
+                    event, "Please specify the device IMEI. Usage: /link_device <imei>"
                 )
                 return
 
@@ -139,7 +139,7 @@ class SMSTelegramClient(TelegramClient):
                 event, f"Device {imei} has been bound to this group successfully."
             )
 
-        @self.on(events.NewMessage(pattern="^/unlinkdevice"))
+        @self.on(events.NewMessage(pattern="^/unlink_device"))
         async def handle_unbind_device_command(event):
             if not await self._check_admin_permission(event):
                 return
@@ -167,7 +167,7 @@ class SMSTelegramClient(TelegramClient):
 
             await self._send_response(event, f"Device {imei} has been unbound from this group.")
 
-        @self.on(events.NewMessage(pattern="^/linkphone"))
+        @self.on(events.NewMessage(pattern="^/link_phone"))
         async def handle_bind_phone_command(event):
             if not await self._check_admin_permission(event):
                 return
@@ -176,7 +176,7 @@ class SMSTelegramClient(TelegramClient):
             parts = event.text.split(maxsplit=1)
             if len(parts) < 2:
                 await self._send_response(
-                    event, "Please specify the phone number. Usage: /linkphone <phone>"
+                    event, "Please specify the phone number. Usage: /link_phone <phone>"
                 )
                 return
 
@@ -214,7 +214,7 @@ class SMSTelegramClient(TelegramClient):
                 event, f"Phone number {phone_number} has been bound to the topic successfully."
             )
 
-        @self.on(events.NewMessage(pattern="^/unlinkphone"))
+        @self.on(events.NewMessage(pattern="^/unlink_phone"))
         async def handle_unbind_phone_command(event):
             if not await self._check_admin_permission(event):
                 return
@@ -295,11 +295,11 @@ class SMSTelegramClient(TelegramClient):
             await self._send_response(
                 event,
                 "Available commands:\n"
-                "/linkdevice <imei> - Bind a device to this group\n"
-                "/unlinkdevice <imei> - Remove a device binding\n"
-                "/linkphone <phone> - Bind a phone number to a topic\n"
-                "/unlinkphone <phone> - Remove a phone number binding\n"
-                "/phoneinfo - Show phone number bound to current topic\n"
+                "/link_device <imei> - Bind a device to this group\n"
+                "/unlink_device <imei> - Remove a device binding\n"
+                "/link_phone <phone> - Bind a phone number to a topic\n"
+                "/unlink_phone <phone> - Remove a phone number binding\n"
+                "/phone_info - Show phone number bound to current topic\n"
                 "/status - Show system status\n"
                 "/add_admin [@username] - Add an admin user\n"
                 "/list_admins - List all admin users\n"
@@ -307,7 +307,7 @@ class SMSTelegramClient(TelegramClient):
             )
             raise events.StopPropagation
 
-        @self.on(events.NewMessage(pattern="^/phoneinfo"))
+        @self.on(events.NewMessage(pattern="^/phone_info"))
         async def handle_phone_info_command(event):
             if not await self._check_admin_permission(event):
                 return
