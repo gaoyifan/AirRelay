@@ -4,7 +4,6 @@ AirRelay is a low-cost system for receiving and replying to SMS messages in Tele
 
 ## Table of Contents
 
-- [Overview](#overview)
 - [Features](#features)
 - [Requirements](#requirements)
 - [Quick Start](#quick-start)
@@ -15,24 +14,17 @@ AirRelay is a low-cost system for receiving and replying to SMS messages in Tele
 - [Troubleshooting](#troubleshooting)
 - [License](#license)
 
-## Overview
-
-AirRelay bridges SMS messages and Telegram groups:
-
-1. **Air780E hardware** receives SMS messages and sends them to the bridge
-2. **AirRelay bridge** forwards messages to your Telegram group
-3. **Reply to messages** in Telegram to send SMS responses back
-
-[System Overview](docs/system_overview.md)
-
 ## Features
 
+- **Bridge SMS and Telegram**: Air780E hardware receives SMS, AirRelay forwards them to Telegram
 - **Read SMS in Telegram**: All incoming SMS appear in your Telegram group
 - **Reply via Telegram**: Respond to SMS directly from Telegram
 - **Organized Conversations**: Each phone number gets its own topic
 - **Device Status**: Monitor your device's connection and signal strength
 - **Multiple Admins**: Add other Telegram users as administrators
 - **Delivery Status**: See when SMS messages are delivered
+
+For more details on the system architecture, see [System Overview](docs/system_overview.md).
 
 ## Requirements
 
