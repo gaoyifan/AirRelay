@@ -378,6 +378,7 @@ class SMSTelegramClient(TelegramClient):
             try:
                 # Resolve the username to a user entity
                 user = await self.get_entity(username)
+                logger.debug(f"Resolved username {username} to user {user}")
                 if not user or not hasattr(user, "id"):
                     await self._send_response(event, f"Could not find user: {username}")
                     return

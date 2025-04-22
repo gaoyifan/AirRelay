@@ -168,6 +168,7 @@ class Database:
             return True
 
         try:
+            admins = str(admins) # Convert to string to avoid TypeError
             admin_list = [int(admin_id) for admin_id in admins.split(",")]
             if user_id in admin_list:
                 # Already an admin
@@ -194,6 +195,7 @@ class Database:
             return []
 
         try:
+            admins = str(admins) # Convert to string to avoid TypeError
             return [int(admin_id) for admin_id in admins.split(",")]
         except Exception:
             return []

@@ -12,14 +12,15 @@ from src.db.workers_kv import Database
 from src.models.schemas import Settings
 from src.mqtt.client import AsyncMQTTClient
 
+# Load environment variables from .env file
+load_dotenv()
+
 # Set up logging
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=os.environ.get("LOG_LEVEL", "INFO"),
 )
 logger = logging.getLogger(__name__)
-
-# Load environment variables
-load_dotenv()
 
 
 class AirRelay:
