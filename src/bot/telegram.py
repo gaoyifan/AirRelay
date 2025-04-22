@@ -483,7 +483,7 @@ class SMSTelegramClient(TelegramClient):
         topic_id = self.db.get_topic_from_phone(group_id, sender)
         if not topic_id:
             # Create a new topic
-            topic_title = f"SMS: {sender}"
+            topic_title = f"{sender}"
             topic_id = await self.create_topic(group_id, topic_title)
             if topic_id:
                 # This will also create the reverse mapping
