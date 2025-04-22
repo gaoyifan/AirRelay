@@ -1,6 +1,6 @@
 # AirRelay - SMS to Telegram Bridge
 
-AirRelay is a simple system that lets you receive and reply to SMS messages in Telegram. It connects your Air780E device to a Telegram group, organizing conversations by phone number into separate topics.
+AirRelay is a low-cost system for receiving and replying to SMS messages in Telegram. It connects Air780E device to a Telegram group, organizing conversations by phone number into separate topics.
 
 ## Table of Contents
 
@@ -37,7 +37,7 @@ AirRelay bridges SMS messages and Telegram groups:
 ## Requirements
 
 - **Hardware**:
-  - Air780E
+  - [Air780E](https://detail.tmall.com/item.htm?id=709647275715)
   - SIM card with SMS and data capabilities (requires mobile network connectivity)
   - USB Power supply
 

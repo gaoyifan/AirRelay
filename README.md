@@ -1,6 +1,6 @@
 # AirRelay - 短信转发到 Telegram 的桥接器
 
-AirRelay 是一个简单的系统，让您可以在 Telegram 中接收和回复短信。它将您的 Air780E 设备连接到 Telegram 群组，按电话号码将对话组织到不同的主题中。
+AirRelay 是一个低成本的系统，让您在 Telegram 中接收和回复短信。它将 Air780E 设备连接到 Telegram 群组，按电话号码将对话组织到不同的主题中。
 
 ## 目录
 
@@ -37,7 +37,7 @@ AirRelay 桥接短信和 Telegram 群组：
 ## 要求
 
 - **硬件**：
-  - Air780E
+  - [Air780E](https://detail.tmall.com/item.htm?id=709647275715)
   - 具有短信和数据功能的 SIM 卡（需要移动网络连接）
   - USB 电源
 
