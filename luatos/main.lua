@@ -59,8 +59,8 @@ end
 
 -- Function to process the message queue
 local function process_queue()
-    if not mqttc or not mqttc:ready() then
-        log.warn("Queue", "MQTT not ready, can't process queue")
+    if not mqttc then
+        log.warn("Queue", "MQTT not initialized, can't process queue")
         return
     end
     
@@ -70,10 +70,36 @@ local function process_queue()
     while #message_queue > 0 do
         local msg = table.remove(message_queue, 1)
         log.info("Queue", "Publishing queued message to", msg.topic)
-        mqttc:publish(msg.topic, msg.payload, msg.qos)
+        
+        local success = publish_with_retry(msg.topic, msg.payload, msg.qos)
+        if not success then
+            -- If publish_with_retry failed and couldn't re-queue, we would
+            -- end up in an infinite loop, so we stop processing the queue
+            log.warn("Queue", "Failed to publish message, stopping queue processing")
+            break
+        end
     end
     
-    log.info("Queue", "Queue processing complete")
+    log.info("Queue", "Queue processing complete, remaining items:", #message_queue)
+end
+
+-- Function to publish MQTT message with retry logic
+local function publish_with_retry(topic, payload, qos)
+    if not mqttc then
+        log.warn("MQTT", "MQTT client not initialized")
+        queue_message(topic, payload, qos)
+        return false
+    end
+    
+    local msg_id = mqttc:publish(topic, payload, qos)
+    
+    if not msg_id and qos > 0 then
+        log.warn("MQTT", "Failed to publish to", topic, "queuing for retry")
+        queue_message(topic, payload, qos)
+        return false
+    end
+    
+    return msg_id ~= nil
 end
 
 -- Function to handle incoming SMS messages
@@ -93,14 +119,8 @@ local function handle_incoming_sms(phone_number, message_text)
     local json_payload = json.encode(payload)
     log.info("MQTT", "Publishing to", TOPIC_SMS_INCOMING, json_payload)
     
-    -- Publish to MQTT if connected
-    if mqttc and mqttc:ready() then
-        mqttc:publish(TOPIC_SMS_INCOMING, json_payload, 1) -- QoS 1 for delivery guarantees
-    else
-        log.error("MQTT", "Not connected, can't publish SMS")
-        -- Queue the message for later delivery
-        queue_message(TOPIC_SMS_INCOMING, json_payload, 1)
-    end
+    -- Publish with retry
+    publish_with_retry(TOPIC_SMS_INCOMING, json_payload, 1)
 end
 
 -- Function to send an SMS message
@@ -120,12 +140,8 @@ local function send_sms(recipient, content, message_id)
             imei = mobile.imei()
         }
         
-        if mqttc and mqttc:ready() then
-            mqttc:publish(TOPIC_SMS_STATUS, json.encode(status_payload), 1)
-        else
-            -- Queue status update if MQTT is not connected
-            queue_message(TOPIC_SMS_STATUS, json.encode(status_payload), 1)
-        end
+        -- Publish status update with retry
+        publish_with_retry(TOPIC_SMS_STATUS, json.encode(status_payload), 1)
     end, 1000) -- Report status after 1 second
 end
 
@@ -154,14 +170,14 @@ local function publish_device_status()
         timestamp = os.time()
     }
     
-    if mqttc and mqttc:ready() then
-        mqttc:publish(TOPIC_DEVICE_STATUS, json.encode(status_payload), 1)
-    else
-        -- Only queue device status if there's no other messages in queue
-        -- to avoid filling queue with status messages
-        if #message_queue == 0 then
-            queue_message(TOPIC_DEVICE_STATUS, json.encode(status_payload), 1)
+    -- Handle device status separately - no retry
+    if mqttc then
+        local success = mqttc:publish(TOPIC_DEVICE_STATUS, json.encode(status_payload), 1)
+        if not success then
+            log.info("MQTT", "Device status not published - MQTT publish failed")
         end
+    else
+        log.info("MQTT", "Device status not published - MQTT not initialized")
     end
 end
 
