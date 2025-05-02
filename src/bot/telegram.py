@@ -206,6 +206,9 @@ class SMSTelegramClient(TelegramClient):
                         "Failed to create a new topic. Please check if this group supports topics and bot has permissions to manage topics.",
                     )
                     return
+            else:
+                # When command is used within a topic, use that topic
+                topic_id = current_topic_id
 
             # Create the binding
             self.db.map_phone_topic(group_id, phone_number, topic_id)
